@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<PluginConfig>
+	<Field type="list" id="logLevel" defaultValue="false">
+		<Label>Log level:</Label>
+		<List>
+			<Option value="DEBUG">4 - Debug</Option>
+			<Option value="INFO">3 - Info</Option>
+			<Option value="WARNING">2 - Warnings</Option>
+			<Option value="ERROR">1 - Errors</Option>
+		</List>
+	</Field>
+</PluginConfig>
