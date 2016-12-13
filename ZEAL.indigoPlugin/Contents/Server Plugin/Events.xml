@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<Events>
+    <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
+    <Event id="x71received">
+        <Name>Received Z-Wave Alarm/Notification</Name>
+        <ConfigUI>
+        	<Field type="label" id="intro">
+        		<Label>
+Use this dialog to add, edit or delete  filters for certain alarms/notifications. You may for example choose to INCLUDE all alarms then EXCLUDE only certain alarms, to avoid having to create many triggers.
+				</Label>
+        	</Field>
+        	<Field id="separator1" type="separator"/>
+        	<Field type="menu" id="devMethod" defaultValue="all">
+        		<Label>Trigger for:</Label>
+        		<List>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="all">All devices</Option>
+        		</List>
+        	</Field>
+        	<Field type="list" id="selectedDevices" rows="6" visibleBindingId="devMethod" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        		<Label>Select devices:</Label>
+        		<List class="indigo.devices" filter="indigo.zwave"/>
+        	</Field>
+        	<Field type="label" id="introInclude">
+        		<Label>
+Inclusion filters</Label>
+        	</Field>
+        	<Field id="separator2" type="separator"/>
+        	<Field type="menu" id="selectedIncludeFilter">
+        		<Label>Filter:</Label>
+        		<List class="self" filter="include" method="getTriggerFilters" dynamicReload="true"/>
+				<CallbackMethod>selectedTriggerIncludeFilterChanged</CallbackMethod>
+        	</Field>
+        	<Field type="textfield" id="includeFilterName">
+        		<Label>Filter Name:</Label>
+        	</Field>
+        	<Field id="saveIncludeFilter" type="button" tooltip="Save the filter">
+				<Title>Save</Title>
+				<CallbackMethod>selectedTriggerIncludeFilterSave</CallbackMethod>
+			</Field>
+        	<Field type="label" id="introExclude">
+        		<Label>
+Exclusion filters</Label>
+        	</Field>
+        	<Field id="separator3" type="separator"/>
+        </ConfigUI>
+    </Event>
+</Events>

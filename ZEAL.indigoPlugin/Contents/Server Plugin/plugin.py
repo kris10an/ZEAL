@@ -6,8 +6,9 @@ import indigo
 
 import os
 import sys
+import logging
 #import csv,codecs,cStringIO
-import csvUnicode
+from csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 
 # Note the "indigo" module is automatically imported and made available inside
 # our global name space by the host process.
@@ -106,8 +107,8 @@ class Plugin(indigo.PluginBase):
 		try:
 			while True:
 				#self.getZwaveNodeDevMap()
-				#self.logger.debug(u'runConcurrentThread')
-				self.sleep(60)
+				#self.logger.debug(u'runConcurrentThread 20')
+				self.sleep(20)
 		except self.StopThread:
 			pass
 
@@ -177,7 +178,7 @@ class Plugin(indigo.PluginBase):
 			x71file = zFolder + u'/' + zDefs[u'0x71'][u'file']
 			self.logger.debug(u'Reading file %s' % (x71file))
 			with open(x71file,'rb') as fin:
-				reader = csvUnicode.UnicodeReader(fin, dialect='excel', delimiter=';')
+				reader = unicodeReader(fin, dialect='excel', delimiter=';')
 				header = next(reader)
 				t=zDefs[u'0x71'][u'types']
 				for row in reader:
@@ -252,6 +253,63 @@ class Plugin(indigo.PluginBase):
 		
 		self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices. Skipped %s disabled devices' % (unicode(len(self.zNodes)), unicode(nSkipped)))
 
+	########################################
+	# UI List generators and callbackmethods
+	########################################
+	
+	# X71 trigger/event
+	# x71received
+
+	def getTriggerFilters(self, filter="", valuesDict=None, typeId="", targetId=0):
+		self.logger.debug(u'CALL getTriggerFilters')
+		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		self.logger.debug(u'typeId: %s' % typeId)
+		self.logger.debug(u'targetId: %s' % targetId)
+		myArray = [
+			("_blank"," "),
+			("_createNew","Create new filter...")]
+			
+		if 'includeFilters' in valuesDict:
+			self.logger.debug(u'includeFilters: %s' % unicode(valuesDict['includeFilters']))
+			for k,v in valuesDict['includeFilters']:
+				self.logger.debug(u'k: %s, v: %s' % (k,v))
+				myArray.append( (k,v['name']) )
+		self.logger.debug(u'myArray: %s' % unicode(valuesDict))
+		return myArray
+		
+	def selectedTriggerIncludeFilterChanged(self, valuesDict=None, typeId="", targetId=0):
+		self.logger.debug(u'CALL selectedTriggerIncludeFilterChanged')
+		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		self.logger.debug(u'typeId: %s' % typeId)
+		self.logger.debug(u'targetId: %s' % targetId)
+
+	
+		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
+		return valuesDict
+		
+	def selectedTriggerIncludeFilterSave(self, valuesDict=None, typeId="", targetId=0):
+		self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
+		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+
+		if valuesDict['selectedIncludeFilter'] == '_createNew': # Saving new filter
+			if 'includeFilters' not in valuesDict:
+				self.logger.debug(u'Creating includeFilters list in valuesDict')
+				valuesDict['includeFilters'] = list()
+				#valuesDict['includeFilters'] = indigo.List()
+			
+			tmpDict = {}
+			#tmpDict = indigo.Dict()
+			tmpDict['name'] = valuesDict['includeFilterName']
+			self.logger.debug(u'tmpDict: %s' % unicode(tmpDict))
+			
+			valuesDict['includeFilters'].append(tmpDict)
+			valuesDict['includeFilters'].append('a')
+			valuesDict['includeFilters'].append('b')
+			valuesDict['selectedIncludeFilter'] = len(valuesDict['includeFilters'])
+			
+		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		return valuesDict
+		
 
 	########################################
 	# UI VALIDATION

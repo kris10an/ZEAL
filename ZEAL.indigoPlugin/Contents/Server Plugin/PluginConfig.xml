@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <PluginConfig>
-	<Field type="menu" id="logLevel" defaultValue="false">
+	<Field type="menu" id="logLevel" defaultValue="INFO">
 		<Label>Log level:</Label>
 		<List>
 			<Option value="DEBUG">4 - Debug</Option>
