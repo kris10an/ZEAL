@@ -36,6 +36,16 @@ def convertListToHexStr(byteList):
 # hexidecimal list (string formatted) 
 def convertListToHexStrList(byteList):
 	return [u"0x%02X" % byte for byte in byteList]
+	
+########################################
+# Safely get keys from dictionary
+def safeGet(dct, defaultVal, *keys):
+    for key in keys:
+        try:
+            dct = dct[key]
+        except KeyError:
+            return defaultVal
+    return dct
 
 ################################################################################
 class Plugin(indigo.PluginBase):
@@ -48,6 +58,8 @@ class Plugin(indigo.PluginBase):
 	
 		# Set plugin preferences
 		self.setUpdatePluginPrefs()
+		
+		self.zDefs = zDefs
 		
 		
 		
@@ -123,15 +135,16 @@ class Plugin(indigo.PluginBase):
 		
 		#self.logger.debug(byteListHexStr)
 		
-		if CC in zDefs:
+		if CC in self.zDefs:
 			self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
-			self.logger.debug(u'Command class:		%s (%s)' % (CC, zDefs[CC][u'description']))
+			self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 			self.logger.debug(u'Command:			%s' % (byteList[8]))
 			self.logger.debug(u'V1 Alarm Type:		%s' % (byteList[9]))
 			self.logger.debug(u'V1 Alarm Level:		%s' % (byteList[10]))
 			self.logger.debug(u'Notification Status: %s' % (byteList[12]))
-			self.logger.debug(u'Notification Type:	%s (%s)' % (byteList[13], zDefs[CC][u'types'][byteListHexStr[13]][u'description']))
-			self.logger.debug(u'Event:				%s (%s)' % (byteList[14], zDefs[CC][u'types'][byteListHexStr[13]][u'events'][byteListHexStr[14]][u'description']))
+			self.logger.debug(u'Notification Type:	%s (%s)' % (byteList[13], self.zDefs[CC][u'types'][byteListHexStr[13]][u'description']))
+			#self.logger.debug(u'Event:				%s (%s)' % (byteList[14], self.zDefs[CC][u'types'][byteListHexStr[13]][u'events'][byteListHexStr[14]][u'description']))
+			self.logger.debug(u'Event:				%s (%s)' % (byteList[14], safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description')))
 			if len(byteList) >= 18:
 				eventParmStr = u''
 				i = 16
@@ -175,30 +188,30 @@ class Plugin(indigo.PluginBase):
 		# 0x71 Notification/alarm command class
 		
 		try:
-			x71file = zFolder + u'/' + zDefs[u'0x71'][u'file']
+			x71file = zFolder + u'/' + self.zDefs[u'0x71'][u'file']
 			self.logger.debug(u'Reading file %s' % (x71file))
-			with open(x71file,'rb') as fin:
+			with open(x71file,'r') as fin:
 				reader = unicodeReader(fin, dialect='excel', delimiter=';')
 				header = next(reader)
-				t=zDefs[u'0x71'][u'types']
+				t=self.zDefs[u'0x71'][u'types']
 				for row in reader:
 					if not row[0] in t:
 						t[row[0]] = {}
 						t[row[0]][u'description'] = row[1]
 						t[row[0]][u'version'] = row[2]
 						t[row[0]][u'events'] = {}
+
+					e = t[row[0]][u'events']
+					if not row[3] in e:
+						e[row[3]] = {}
+						e[row[3]]['description'] = row[4]
+						e[row[3]]['version'] = row[5]
+						e[row[3]]['parameterText'] = row[6]
 					else:
-						e = t[row[0]][u'events']
-						if not row[3] in e:
-							e[row[3]] = {}
-							e[row[3]]['description'] = row[4]
-							e[row[3]]['version'] = row[5]
-							e[row[3]]['parameterText'] = row[6]
-						else:
-							self.logger.error(u'Duplicate notification event in file %s, misconfiguration' % (x71file))					
+						self.logger.error(u'Duplicate notification event in file %s, misconfiguration' % (x71file))					
 						
 		except IOError:
-			self.logger.critical(u'Could not read file %s, quitting plugin' % (x71file))
+			self.logger.critical(u'Could not read file %s' % (x71file))
 			self.errorState = True	
 		except:
 			self.logger.critical(u'Unexpected error while reading file %s' % (x71file))
@@ -206,7 +219,7 @@ class Plugin(indigo.PluginBase):
 			raise
 		else:
 			self.logger.debug(u"Successfully read file '%s'" % (x71file))
-			#self.logger.debug(zDefs)
+			#self.logger.debug(self.zDefs)
 			
 	#####
 	# Map Z-wave nodes to devices
@@ -270,10 +283,10 @@ class Plugin(indigo.PluginBase):
 			("_createNew","Create new filter...")]
 			
 		if 'includeFilters' in valuesDict:
-			self.logger.debug(u'includeFilters: %s' % unicode(valuesDict['includeFilters']))
-			for k,v in valuesDict['includeFilters']:
+			self.logger.debug(u'includeFilters: %s' % unicode(valuesDict[u'includeFilters']))
+			for k,v in valuesDict.get(u'includeFilters', list()):
 				self.logger.debug(u'k: %s, v: %s' % (k,v))
-				myArray.append( (k,v['name']) )
+				myArray.append( (k,v[u'name']) )
 		self.logger.debug(u'myArray: %s' % unicode(valuesDict))
 		return myArray
 		
@@ -291,21 +304,18 @@ class Plugin(indigo.PluginBase):
 		self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
 		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 
-		if valuesDict['selectedIncludeFilter'] == '_createNew': # Saving new filter
-			if 'includeFilters' not in valuesDict:
-				self.logger.debug(u'Creating includeFilters list in valuesDict')
-				valuesDict['includeFilters'] = list()
-				#valuesDict['includeFilters'] = indigo.List()
-			
+		if valuesDict[u'selectedIncludeFilter'] == u'_createNew': # Saving new filter
+			self.logger.debug(u'Saving new filter..')
+			includeFilters = valuesDict.get(u'includeFilters', list())
+
+			#tmpDict = {}
 			tmpDict = {}
-			#tmpDict = indigo.Dict()
-			tmpDict['name'] = valuesDict['includeFilterName']
+			tmpDict[u'name'] = valuesDict[u'includeFilterName']
 			self.logger.debug(u'tmpDict: %s' % unicode(tmpDict))
-			
-			valuesDict['includeFilters'].append(tmpDict)
-			valuesDict['includeFilters'].append('a')
-			valuesDict['includeFilters'].append('b')
-			valuesDict['selectedIncludeFilter'] = len(valuesDict['includeFilters'])
+
+			includeFilters.append(tmpDict)
+			valuesDict[u'includeFilters'] = includeFilters
+			#valuesDict[u'selectedIncludeFilter'] = unicode(len(valuesDict[u'includeFilters'])-1)
 			
 		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
