@@ -9,4 +9,7 @@
 			<Option value="ERROR">1 - Errors</Option>
 		</List>
 	</Field>
+	<Field type="checkbox" id="extensiveDebug" defaultValue="False">
+		<Label>Extensive debug log</Label>
+	</Field>
 </PluginConfig>

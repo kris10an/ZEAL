@@ -7,6 +7,7 @@ import indigo
 import os
 import sys
 import logging
+import json
 #import csv,codecs,cStringIO
 from csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 
@@ -46,6 +47,8 @@ def safeGet(dct, defaultVal, *keys):
         except KeyError:
             return defaultVal
     return dct
+    
+
 
 ################################################################################
 class Plugin(indigo.PluginBase):
@@ -61,6 +64,7 @@ class Plugin(indigo.PluginBase):
 		
 		self.zDefs = zDefs
 		
+		self.tempFilter = {} # Temporary filter values, for use in UI dialog before storing to valuesDict
 		
 		
 
@@ -100,7 +104,9 @@ class Plugin(indigo.PluginBase):
 		else: setText = u'Setting'
 		self.indigo_log_handler.setLevel(self.pluginPrefs.get(u'logLevel', u'INFO'))
 		self.plugin_file_handler.setLevel(u'DEBUG')
-		self.logger.debug(u'%s log level to %s' % (setText, self.pluginPrefs.get(u'logLevel', u'INFO')))
+		self.ed = self.pluginPrefs.get(u'extensiveDebug', False)
+		self.logger.info(u'%s log level to %s' % (setText, self.pluginPrefs.get(u'logLevel', u'INFO')))
+		self.logger.debug(u'Extensive debug logging set to %s' % unicode(self.ed))
 		self.logger.debug(u'%s file handler log level to DEBUG' % (setText))
 		# DEBUG		: All debug info
 		# INFO		: Informational messages relevant to the user
@@ -153,7 +159,7 @@ class Plugin(indigo.PluginBase):
 					i += 1
 				self.logger.debug(u'Event Parameters:	%s' % (eventParmStr))
 		
-			self.logger.error(u'error')
+			#self.logger.error(u'error')
 			
 		
 		# 			self.logger.debug(u'endpoint: %s, type: %s' % (endpoint, type(endpoint)))
@@ -239,7 +245,7 @@ class Plugin(indigo.PluginBase):
 			endpoint = dev.ownerProps.get('zwDevEndPoint')
 
 			if not dev.enabled:
-				self.logger.debug(u'Skipping device id %s "%s" with endpoint %s - device disabled' % (unicode(dev.id), unicode(dev.name), endpoint))
+				if self.ed: self.logger.debug(u'Skipping device id %s "%s" with endpoint %s - device disabled' % (unicode(dev.id), unicode(dev.name), endpoint))
 				nSkipped += 1
 				continue
 
@@ -251,20 +257,38 @@ class Plugin(indigo.PluginBase):
 			if not endpoint in self.zNodes[dev.address] or (dev.ownerProps.get('zwDevSubIndex') <= self.zNodes[dev.address][endpoint].ownerProps.get('zwDevSubIndex')):
 				if not endpoint in self.zNodes[dev.address]: replaceStr = u'New add'
 				else: replaceStr = u'Replaced: lower sub index'
-				self.logger.debug(u'Mapping device id %s "%s" with endpoint %s - %s' % (unicode(dev.id), unicode(dev.name), unicode(endpoint), replaceStr))
+				if self.ed: self.logger.debug(u'Mapping device id %s "%s" with endpoint %s - %s' % (unicode(dev.id), unicode(dev.name), unicode(endpoint), replaceStr))
 				self.zNodes[dev.address][endpoint] = dev
 				tmpNodes.discard(dev.address)
 			else:
-				self.logger.debug(u'Skipping device id %s "%s" with endpoint %s - higher subIndex' % (unicode(dev.id), unicode(dev.name), unicode(endpoint)))
+				if self.ed: self.logger.debug(u'Skipping device id %s "%s" with endpoint %s - higher subIndex' % (unicode(dev.id), unicode(dev.name), unicode(endpoint)))
 			
 		
 		# Check if some z-wave devices might have been deleted or disabled since last update, and remove those from zNodes
 		for node in tmpNodes:
 			if node in self.zNodes:
 				del self.zNodes[node]
-				self.logger.debug(u'Removed node %s from zNodes dict' % (unicode(node)))
+				if self.ed: self.logger.debug(u'Removed node %s from zNodes dict' % (unicode(node)))
+				
+		# FIX
+		# Workaround, some devices send with endpoint None, while none of the Indigo devices have endpoint None (i.e. two devices
+		# with endpoint 1 and 2
+		for node in self.zNodes:
+			if 1 in self.zNodes[node] and not None in self.zNodes[node]:
+				# Has endpoint 1, but not None, copy 1 to None
+				self.zNodes[node][None] = self.zNodes[node][1]
+				if self.ed: self.logger.debug(u'Device id %s "%s" has no device with endpoint None - copied from 1' % (unicode(dev.id), unicode(dev.name)))
 		
 		self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices. Skipped %s disabled devices' % (unicode(len(self.zNodes)), unicode(nSkipped)))
+		#if self.ed: self.logger.debug(u'zNodes dict:\n%s' % unicode(self.zNodes))
+		
+	########################################
+	# Actions
+	########################################
+
+	def testAction(self, action, test1):
+		self.logger.debug(u"%s" % unicode(action))
+		self.logger.debug(u"%s" % unicode(test1))
 
 	########################################
 	# UI List generators and callbackmethods
@@ -273,49 +297,89 @@ class Plugin(indigo.PluginBase):
 	# X71 trigger/event
 	# x71received
 
-	def getTriggerFilters(self, filter="", valuesDict=None, typeId="", targetId=0):
-		self.logger.debug(u'CALL getTriggerFilters')
-		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
-		self.logger.debug(u'typeId: %s' % typeId)
-		self.logger.debug(u'targetId: %s' % targetId)
-		myArray = [
-			("_blank"," "),
-			("_createNew","Create new filter...")]
-			
-		if 'includeFilters' in valuesDict:
-			self.logger.debug(u'includeFilters: %s' % unicode(valuesDict[u'includeFilters']))
-			for k,v in valuesDict.get(u'includeFilters', list()):
-				self.logger.debug(u'k: %s, v: %s' % (k,v))
-				myArray.append( (k,v[u'name']) )
-		self.logger.debug(u'myArray: %s' % unicode(valuesDict))
-		return myArray
+	# get available filters 
+	def getTriggerList(self, filter="", valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL getTriggerFilters')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'filter: %s' % filter)
+		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
+		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
 		
-	def selectedTriggerIncludeFilterChanged(self, valuesDict=None, typeId="", targetId=0):
-		self.logger.debug(u'CALL selectedTriggerIncludeFilterChanged')
-		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
-		self.logger.debug(u'typeId: %s' % typeId)
-		self.logger.debug(u'targetId: %s' % targetId)
+		if filter in [u'includeFilters']:
+			myArray = [
+				(u"_blank",u" "),
+				(u"_createNew",u"Create new filter...")]
+		elif filter in [u'alarmTypes', u'events']:
+			myArray = [
+				(u"all",u"All")]
+			
+		if filter == u'includeFilters':
+			if u'includeFilters' in valuesDict:
+				if self.ed: self.logger.debug(u'includeFilters: %s' % unicode(valuesDict[u'includeFilters']))
+				includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
+				for filterNum, filterDict in enumerate(includeFilters):
+					#self.logger.debug(u'k: %s, v: %s' % (k,v))
+					myArray.append( (filterNum,filterDict['name']) )
+		elif filter == u'alarmTypes':
+			for cmdType, cmdTypeDict in self.zDefs[u'0x71'][u'types'].items():
+				myArray.append( (cmdType,safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
+		elif filter == u'events':
+			if valuesDict[u'selectedIncludeTypes'] == u'all':
+				if self.ed: self.logger.debug(u'Selected all alarm types')
+			elif not valuesDict[u'selectedIncludeTypes'] in self.zDefs[u'0x71'][u'types']:
+				self.logger.warn(u'Invalid or no selected alarm/notification type')
+			else:
+				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[u'selectedIncludeTypes']][u'events'].items():
+					myArray.append( (event,unicode(event) + u' - ' + safeGet(eventDict, u'Unspecified event', u'description')) )
+					
+		if self.ed: self.logger.debug(u'myArray: %s' % unicode(valuesDict))
 
+		return myArray	
+		
+	def selectedTriggerFilterChangedSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedSelection')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
+		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
+
+		if valuesDict[u'selectedIncludeFilter'] == u'_createNew' or valuesDict[u'selectedIncludeFilter'] == u'_blank':
+			if self.ed: self.logger.debug(u'New filter selected, clearing values from UI')
+			valuesDict[u'includeFilterName'] = u''
+			valuesDict[u'selectedIncludeTypes'] = u''
+			valuesDict[u'selectedIncludeEvents'] = u''
+	
+		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
+		return valuesDict
+		
+		
+	def selectedTriggerFilterChangedIntSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedIntSelection')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
+		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
 	
 		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
 	def selectedTriggerIncludeFilterSave(self, valuesDict=None, typeId="", targetId=0):
-		self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
-		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		
+		errorMsg = ''
 
 		if valuesDict[u'selectedIncludeFilter'] == u'_createNew': # Saving new filter
 			self.logger.debug(u'Saving new filter..')
-			includeFilters = valuesDict.get(u'includeFilters', list())
+			includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
+			#self.logger.debug(u'JSON: %s' % getJSON)
+			#includeFilters = self.load(getJSON)
+			
+			currFilter = {}
+			currFilter[u'name'] = valuesDict[u'includeFilterName']
+			if self.ed: self.logger.debug(u'tmpDict: %s' % unicode(currFilter))
 
-			#tmpDict = {}
-			tmpDict = {}
-			tmpDict[u'name'] = valuesDict[u'includeFilterName']
-			self.logger.debug(u'tmpDict: %s' % unicode(tmpDict))
-
-			includeFilters.append(tmpDict)
-			valuesDict[u'includeFilters'] = includeFilters
-			#valuesDict[u'selectedIncludeFilter'] = unicode(len(valuesDict[u'includeFilters'])-1)
+			includeFilters.append(currFilter)
+			valuesDict[u'includeFilters'] = self.store(includeFilters)
+			valuesDict[u'selectedIncludeFilter'] = unicode(len(includeFilters)-1)
 			
 		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
@@ -355,3 +419,16 @@ class Plugin(indigo.PluginBase):
 		
 		# DO VALIDATION
 		self.pluginConfigErrorState = False
+		
+	########################################
+	# HELPERS
+	########################################	
+	
+
+	########################################
+	# Store and load information
+	def store(self, val):
+		return json.dumps(val)
+	
+	def load(self, val):
+		return json.loads(val)

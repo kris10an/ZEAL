@@ -26,17 +26,38 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
 Inclusion filters</Label>
         	</Field>
         	<Field id="separator2" type="separator"/>
-        	<Field type="menu" id="selectedIncludeFilter">
+        	<Field type="menu" id="selectedIncludeFilter" default="_blank">
         		<Label>Filter:</Label>
-        		<List class="self" filter="include" method="getTriggerFilters" dynamicReload="true"/>
-				<CallbackMethod>selectedTriggerIncludeFilterChanged</CallbackMethod>
+        		<List class="self" filter="includeFilters" method="getTriggerList" dynamicReload="true"/>
+				<CallbackMethod>selectedTriggerFilterChangedSelection</CallbackMethod>
         	</Field>
         	<Field type="textfield" id="includeFilterName">
         		<Label>Filter Name:</Label>
         	</Field>
+        	<Field type="menu" id="selectedIncludeTypes" default="all">
+        		<Label>Alarm/notification types:</Label>
+        		<List class="self" filter="alarmTypes" method="getTriggerList" dynamicReload="true"/>
+				<CallbackMethod>selectedTriggerFilterChangedIntSelection</CallbackMethod>
+        	</Field>
+        	<Field type="list" id="selectedIncludeEvents" default="all" rows="6">
+        		<Label>Events:</Label>
+        		<List class="self" filter="events" method="getTriggerList" dynamicReload="true"/>
+				<CallbackMethod>selectedTriggerFilterChangedIntSelection</CallbackMethod>
+        	</Field>
+        	<Field type="textfield" id="includeFilterStatus" default="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true">
+        		<Label>Save/edit status:
+
+</Label>
+			</Field>
+        	<Field type="checkbox" id="showIncludeFilterStatus" default="False">
+        	</Field>
         	<Field id="saveIncludeFilter" type="button" tooltip="Save the filter">
 				<Title>Save</Title>
 				<CallbackMethod>selectedTriggerIncludeFilterSave</CallbackMethod>
+			</Field>
+        	<Field id="deleteIncludeFilter" type="button" tooltip="Delete the selected filter">
+				<Title>Delete</Title>
+				<CallbackMethod>selectedTriggerIncludeFilterDelete</CallbackMethod>
 			</Field>
         	<Field type="label" id="introExclude">
         		<Label>

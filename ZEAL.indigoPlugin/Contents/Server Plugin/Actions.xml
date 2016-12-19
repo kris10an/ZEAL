@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<Actions>
+    <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
+    <Action id="testAction">
+        <Name>Test action</Name>
+        <CallbackMethod>testAction</CallbackMethod>
+    </Action>
+</Actions>
