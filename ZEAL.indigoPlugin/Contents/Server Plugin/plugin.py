@@ -324,12 +324,15 @@ class Plugin(indigo.PluginBase):
 			for cmdType, cmdTypeDict in self.zDefs[u'0x71'][u'types'].items():
 				myArray.append( (cmdType,safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
 		elif filter == u'events':
-			if valuesDict[u'selectedIncludeTypes'] == u'all':
+			if u'includeFilterType' not in valuesDict:
+				pass
+			elif valuesDict[u'includeFilterType'] == u'all':
 				if self.ed: self.logger.debug(u'Selected all alarm types')
-			elif not valuesDict[u'selectedIncludeTypes'] in self.zDefs[u'0x71'][u'types']:
-				self.logger.warn(u'Invalid or no selected alarm/notification type')
+			elif not valuesDict[u'includeFilterType'] in self.zDefs[u'0x71'][u'types']:
+				pass
+				#self.logger.warn(u'Invalid or no selected alarm/notification type')
 			else:
-				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[u'selectedIncludeTypes']][u'events'].items():
+				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[u'includeFilterType']][u'events'].items():
 					myArray.append( (event,unicode(event) + u' - ' + safeGet(eventDict, u'Unspecified event', u'description')) )
 					
 		if self.ed: self.logger.debug(u'myArray: %s' % unicode(valuesDict))
@@ -345,15 +348,47 @@ class Plugin(indigo.PluginBase):
 		if valuesDict[u'selectedIncludeFilter'] == u'_createNew' or valuesDict[u'selectedIncludeFilter'] == u'_blank':
 			if self.ed: self.logger.debug(u'New filter selected, clearing values from UI')
 			valuesDict[u'includeFilterName'] = u''
-			valuesDict[u'selectedIncludeTypes'] = u''
-			valuesDict[u'selectedIncludeEvents'] = u''
+			valuesDict[u'includeFilterType'] = u''
+			valuesDict[u'includeFilterEvents'] = list()
+		else:
+			if self.ed: self.logger.debug(u'Existing filter selected, retrieving stored values')
+			if u'includeFilters' in valuesDict:
+				includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
+				currFilter = includeFilters[int(valuesDict[u'selectedIncludeFilter'])]
+				valuesDict[u'includeFilterName'] = currFilter[u'name']
+				valuesDict[u'includeFilterType'] = currFilter[u'type']
+				valuesDict[u'includeFilterEvents'] = currFilter[u'events']
+				valuesDict[u'includeFilterStatus'] = ''
+				valuesDict[u'showIncludeFilterStatus'] = False
+			else:
+				valuesDict[u'includeFilterStatus'] = 'Could not get selected filter'
+				valuesDict[u'showIncludeFilterStatus'] = True
+				
+			
+			
+		
+		valuesDict[u'includeFilterStatus'] = ''
+		valuesDict[u'showIncludeFilterStatus'] = False
 	
 		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
 		
-	def selectedTriggerFilterChangedIntSelection(self, valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedIntSelection')
+	def selectedTriggerFilterChangedTypeSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedTypeSelection')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
+		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
+		
+		
+		valuesDict[u'includeFilterEvents'] = list()
+	
+		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
+		return valuesDict
+		
+		
+	def selectedTriggerFilterChangedEventSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedEventSelection')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
@@ -365,23 +400,69 @@ class Plugin(indigo.PluginBase):
 		if self.ed: self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		
-		errorMsg = ''
+		errorMsg = list()
+		valError = False
+		filterAction = ''
 
-		if valuesDict[u'selectedIncludeFilter'] == u'_createNew': # Saving new filter
-			self.logger.debug(u'Saving new filter..')
+		if valuesDict[u'selectedIncludeFilter'] == u'_createNew': filterAction = 'new' # Saving new filter
+		elif valuesDict[u'selectedIncludeFilter'] != u'_blank': filterAction = 'modify' #Modifying existing filter
+		elif valuesDict[u'selectedIncludeFilter'] == u'_blank': filterAction = 'blank' #No filter selected
+		
+		if filterAction == 'new' or filterAction == 'modify':
 			includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
-			#self.logger.debug(u'JSON: %s' % getJSON)
-			#includeFilters = self.load(getJSON)
 			
-			currFilter = {}
-			currFilter[u'name'] = valuesDict[u'includeFilterName']
-			if self.ed: self.logger.debug(u'tmpDict: %s' % unicode(currFilter))
-
-			includeFilters.append(currFilter)
-			valuesDict[u'includeFilters'] = self.store(includeFilters)
-			valuesDict[u'selectedIncludeFilter'] = unicode(len(includeFilters)-1)
+			if filterAction == 'new':
+				self.logger.debug(u'Saving new filter..')
+				currFilter = {}
+			elif filterAction == 'modify':
+				self.logger.debug(u'Modifying existing filter..')
+				currFilter = includeFilters[int(valuesDict[u'selectedIncludeFilter'])]
 			
-		self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+			# Filter name
+			if len(valuesDict[u'includeFilterName']) > 0:
+				currFilter[u'name'] = valuesDict[u'includeFilterName']
+			else:
+				errorMsg.append(u'Please specify a filter name')
+				valError = True
+			
+			# Filter alarm types
+			if not valuesDict[u'includeFilterType'] in self.zDefs[u'0x71'][u'types'] and valuesDict[u'includeFilterType'] != u'all':
+				errorMsg.append(u'Invalid or no alarm/notification type selected')
+				valError = True
+			currFilter[u'type'] = valuesDict[u'includeFilterType']
+			
+			# Filter events
+			if u'all' in valuesDict[u'includeFilterEvents']:
+				currFilter[u'events'] = u'all'
+			elif len(valuesDict[u'includeFilterEvents']) > 0:
+				currFilter[u'events'] = list(valuesDict[u'includeFilterEvents']) # need to convert indigo list to python list, for json
+			else:
+				errorMsg.append(u'Invalid or no event selected')
+				valError = True
+			
+			if self.ed: self.logger.debug(u'currFilter: %s' % unicode(currFilter))
+			
+			if valError:
+				valuesDict[u'includeFilterStatus'] = '\n'.join(errorMsg)
+				valuesDict[u'showIncludeFilterStatus'] = True
+			else:
+				if filterAction == 'new':
+					includeFilters.append(currFilter)
+					valuesDict[u'includeFilters'] = self.store(includeFilters)
+					valuesDict[u'selectedIncludeFilter'] = unicode(len(includeFilters)-1)
+					valuesDict[u'includeFilterStatus'] = 'Saved'
+					valuesDict[u'showIncludeFilterStatus'] = True
+				elif filterAction == 'modify':
+					valuesDict[u'includeFilters'] = self.store(includeFilters)
+					valuesDict[u'includeFilterStatus'] = 'Modified'
+					valuesDict[u'showIncludeFilterStatus'] = True
+		elif filterAction == 'blank':
+			valuesDict[u'includeFilterStatus'] = 'Please select a filter before saving'
+			valuesDict[u'showIncludeFilterStatus'] = True
+			
+					
+			
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
 
@@ -405,6 +486,21 @@ class Plugin(indigo.PluginBase):
 			return (False, valuesDict, errorDict)
 		else:
 			return (True, valuesDict)
+			
+	def validateEventConfigUi(self, valuesDict=None, typeId='', eventId=0):
+		# Do your validation logic here
+		errorDict = indigo.Dict()
+		# 		errorDict["someKey"] = "The value of this field must be from 1 to 10"
+		# 		errorDict[“showAlertText”] = “Some very descriptive message to your user that will help them solve the validation problem.”
+		
+		# Make sure selected values are reset
+		valuesDict[u'includeFilterStatus'] = ''
+		valuesDict[u'showIncludeFilterStatus'] = False
+		valuesDict[u'includeFilterName'] = ''
+		valuesDict[u'includeFilterType'] = ''
+		valuesDict[u'includeFilterEvents'] = list()
+		valuesDict[u'selectedIncludeFilter'] = u'_blank'
+		return (True, valuesDict, errorDict)
 		
 		
 	# def getDeviceConfigUiValues():
