@@ -21,6 +21,9 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
         		<Label>Select devices:</Label>
         		<List class="indigo.devices" filter="indigo.zwave"/>
         	</Field>
+        	
+        	<!-- INCLUSION FILTERS -->
+        	
         	<Field type="label" id="introInclude">
         		<Label>
 Inclusion filters</Label>
@@ -30,7 +33,7 @@ Inclusion filters</Label>
         		<Label>Select 
 Filter:</Label>
         		<List class="self" filter="includeFilters" method="getTriggerList" dynamicReload="true"/>
-				<CallbackMethod>selectedTriggerFilterChangedSelection</CallbackMethod>
+				<CallbackMethod>x71receivedIncludeFilterChangedFilterSelection</CallbackMethod>
         	</Field>
         	<Field type="textfield" id="includeFilterName">
         		<Label>Filter Name:</Label>
@@ -39,14 +42,14 @@ Filter:</Label>
         		<Label>Alarm/
 notification types:</Label>
         		<List class="self" filter="alarmTypes" method="getTriggerList" dynamicReload="true"/>
-				<CallbackMethod>selectedTriggerFilterChangedTypeSelection</CallbackMethod>
+				<CallbackMethod>x71receivedIncludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
         	<Field type="list" id="includeFilterEvents" default="all" rows="6">
         		<Label>Events:</Label>
-        		<List class="self" filter="events" method="getTriggerList" dynamicReload="true"/>
-				<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>
+        		<List class="self" filter="eventsInclude" method="getTriggerList" dynamicReload="true"/>
+				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
         	</Field>
-        	<Field type="textfield" id="includeFilterStatus" default="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true">
+        	<Field type="textfield" id="includeFilterStatus" default="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
         		<Label>Save/edit status:
 
 </Label>
@@ -55,17 +58,55 @@ notification types:</Label>
         	</Field>
         	<Field id="saveIncludeFilter" type="button" tooltip="Save the filter">
 				<Title>Save</Title>
-				<CallbackMethod>selectedTriggerIncludeFilterSave</CallbackMethod>
+				<CallbackMethod>x71receivedSelectedIncludeFilterSave</CallbackMethod>
 			</Field>
         	<Field id="deleteIncludeFilter" type="button" tooltip="Delete the selected filter">
 				<Title>Delete</Title>
-				<CallbackMethod>selectedTriggerIncludeFilterDelete</CallbackMethod>
+				<CallbackMethod>x71receivedSelectedIncludeFilterDelete</CallbackMethod>
 			</Field>
+			
+			<!-- EXCLUSION FILTERS -->
+			
         	<Field type="label" id="introExclude">
         		<Label>
 Exclusion filters</Label>
         	</Field>
         	<Field id="separator3" type="separator"/>
+        	<Field type="menu" id="selectedExcludeFilter" default="_blank">
+        		<Label>Select 
+Filter:</Label>
+        		<List class="self" filter="excludeFilters" method="getTriggerList" dynamicReload="true"/>
+				<CallbackMethod>x71receivedExcludeFilterChangedFilterSelection</CallbackMethod>
+        	</Field>
+        	<Field type="textfield" id="excludeFilterName">
+        		<Label>Filter Name:</Label>
+        	</Field>
+        	<Field type="menu" id="excludeFilterType" default="all">
+        		<Label>Alarm/
+notification types:</Label>
+        		<List class="self" filter="alarmTypes" method="getTriggerList" dynamicReload="true"/>
+				<CallbackMethod>x71receivedExcludeFilterChangedTypeSelection</CallbackMethod>
+        	</Field>
+        	<Field type="list" id="excludeFilterEvents" default="all" rows="6">
+        		<Label>Events:</Label>
+        		<List class="self" filter="eventsExclude" method="getTriggerList" dynamicReload="true"/>
+				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
+        	</Field>
+        	<Field type="textfield" id="excludeFilterStatus" default="" readonly="true" visibleBindingId="showExcludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+        		<Label>Save/edit status:
+
+</Label>
+			</Field>
+        	<Field type="checkbox" id="showExcludeFilterStatus" default="False" hidden="true">
+        	</Field>
+        	<Field id="saveExcludeFilter" type="button" tooltip="Save the filter">
+				<Title>Save</Title>
+				<CallbackMethod>x71receivedSelectedExcludeFilterSave</CallbackMethod>
+			</Field>
+        	<Field id="deleteExcludeFilter" type="button" tooltip="Delete the selected filter">
+				<Title>Delete</Title>
+				<CallbackMethod>x71receivedSelectedExcludeFilterDelete</CallbackMethod>
+			</Field>
         </ConfigUI>
     </Event>
 </Events>

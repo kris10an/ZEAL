@@ -299,143 +299,192 @@ class Plugin(indigo.PluginBase):
 
 	# get available filters 
 	def getTriggerList(self, filter="", valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL getTriggerFilters')
+		if self.ed: self.logger.debug(u'CALL getTriggerList')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		if self.ed: self.logger.debug(u'filter: %s' % filter)
 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
 		
-		if filter in [u'includeFilters']:
+		if filter in [u'includeFilters', u'excludeFilters']:
 			myArray = [
 				(u"_blank",u" "),
 				(u"_createNew",u"Create new filter...")]
-		elif filter in [u'alarmTypes', u'events']:
+		elif filter in [u'alarmTypes']:
 			myArray = [
 				(u"all",u"All")]
+		elif filter in [u'eventsInclude', u'eventsExclude']:
+			myArray = list()
 			
-		if filter == u'includeFilters':
-			if u'includeFilters' in valuesDict:
-				if self.ed: self.logger.debug(u'includeFilters: %s' % unicode(valuesDict[u'includeFilters']))
-				includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
-				for filterNum, filterDict in enumerate(includeFilters):
+		if filter == u'includeFilters' or filter == u'excludeFilters':
+			if filter in valuesDict:
+				if self.ed: self.logger.debug(u'%s: %s' % (unicode(filter), unicode(valuesDict[filter])))
+				filterList = self.load(valuesDict.get(filter, self.store(list())))
+				for filterNum, filterDict in enumerate(filterList):
 					#self.logger.debug(u'k: %s, v: %s' % (k,v))
 					myArray.append( (filterNum,filterDict['name']) )
 		elif filter == u'alarmTypes':
 			for cmdType, cmdTypeDict in self.zDefs[u'0x71'][u'types'].items():
 				myArray.append( (cmdType,safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
-		elif filter == u'events':
-			if u'includeFilterType' not in valuesDict:
+		elif filter == u'eventsInclude' or filter == u'eventsExclude':
+			if filter == u'eventsInclude': typeKey = u'includeFilterType'
+			elif filter == u'eventsExclude': typeKey = u'excludeFilterType'
+			
+			if typeKey not in valuesDict:
 				pass
-			elif valuesDict[u'includeFilterType'] == u'all':
+			elif valuesDict[typeKey] == u'all':
 				if self.ed: self.logger.debug(u'Selected all alarm types')
-			elif not valuesDict[u'includeFilterType'] in self.zDefs[u'0x71'][u'types']:
+			elif not valuesDict[typeKey] in self.zDefs[u'0x71'][u'types']:
 				pass
 				#self.logger.warn(u'Invalid or no selected alarm/notification type')
 			else:
-				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[u'includeFilterType']][u'events'].items():
+				myArray = [(u"all",u"All")]
+				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[typeKey]][u'events'].items():
 					myArray.append( (event,unicode(event) + u' - ' + safeGet(eventDict, u'Unspecified event', u'description')) )
 					
 		if self.ed: self.logger.debug(u'myArray: %s' % unicode(valuesDict))
 
 		return myArray	
-		
-	def selectedTriggerFilterChangedSelection(self, valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedSelection')
+	
+	def x71receivedIncludeFilterChangedFilterSelection(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterChanged(u'includeFilter', valuesDict, typeId, targetId)
+		return valuesDict
+	
+	def x71receivedExcludeFilterChangedFilterSelection(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterChanged(u'excludeFilter', valuesDict, typeId, targetId)
+		return valuesDict
+
+	def selectedFilterChanged(self, type, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedFilterChanged')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
-
-		if valuesDict[u'selectedIncludeFilter'] == u'_createNew' or valuesDict[u'selectedIncludeFilter'] == u'_blank':
-			if self.ed: self.logger.debug(u'New filter selected, clearing values from UI')
-			valuesDict[u'includeFilterName'] = u''
-			valuesDict[u'includeFilterType'] = u''
-			valuesDict[u'includeFilterEvents'] = list()
-		else:
-			if self.ed: self.logger.debug(u'Existing filter selected, retrieving stored values')
-			if u'includeFilters' in valuesDict:
-				includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
-				currFilter = includeFilters[int(valuesDict[u'selectedIncludeFilter'])]
-				valuesDict[u'includeFilterName'] = currFilter[u'name']
-				valuesDict[u'includeFilterType'] = currFilter[u'type']
-				valuesDict[u'includeFilterEvents'] = currFilter[u'events']
-				valuesDict[u'includeFilterStatus'] = ''
-				valuesDict[u'showIncludeFilterStatus'] = False
-			else:
-				valuesDict[u'includeFilterStatus'] = 'Could not get selected filter'
-				valuesDict[u'showIncludeFilterStatus'] = True
-				
-			
-			
+		if self.ed: self.logger.debug(u'type: %s' % type)
 		
+		if type == u'includeFilter':
+			typeC = u'IncludeFilter'
+		elif type == u'excludeFilter':
+			typeC = u'ExcludeFilter'
+		else:
+			self.logger.error(u'Unexpected filter type in selectedFilterChanged')
+			return valuesDict
+
+		# Clear all previous messages
 		valuesDict[u'includeFilterStatus'] = ''
 		valuesDict[u'showIncludeFilterStatus'] = False
+		valuesDict[u'excludeFilterStatus'] = ''
+		valuesDict[u'showExcludeFilterStatus'] = False
+
+		if valuesDict[u'selected'+typeC] == u'_createNew' or valuesDict[u'selected'+typeC] == u'_blank':
+			self.logger.debug(u'New filter selected, clearing values from UI')
+			valuesDict[type+u'Name'] = u''
+			valuesDict[type+u'Type'] = u''
+			valuesDict[type+u'Events'] = list()
+		else:
+			self.logger.debug(u'Existing filter selected, retrieving stored values')
+			if type+u's' in valuesDict:
+				filterList = self.load(valuesDict.get(type+u's', self.store(list())))
+				currFilter = filterList[int(valuesDict[u'selected'+typeC])]
+				valuesDict[type+u'Name'] = currFilter[u'name']
+				valuesDict[type+u'Type'] = currFilter[u'type']
+				valuesDict[type+u'Events'] = currFilter[u'events']
+				valuesDict[type+u'Status'] = ''
+				valuesDict[u'show'+typeC+u'Status'] = False
+				self.logger.debug(u'Retrieved selected filter "%s"' % (currFilter[u'name']))
+			else:
+				valuesDict[type+u'Status'] = 'Could not get selected filter'
+				valuesDict[u'show'+typeC+u'Status'] = True
+				self.logger.error(u'Could not get stored values for selected filter in selectedFilterChanged')
 	
-		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
+		if self.ed: self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
 		
-	def selectedTriggerFilterChangedTypeSelection(self, valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedTypeSelection')
+	def x71receivedIncludeFilterChangedTypeSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL x71receivedIncludeFilterChangedTypeSelection')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
-		
 		
 		valuesDict[u'includeFilterEvents'] = list()
 	
-		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
-		
-	def selectedTriggerFilterChangedEventSelection(self, valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedEventSelection')
+	def x71receivedExcludeFilterChangedTypeSelection(self, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL x71receivedExcludeFilterChangedTypeSelection')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
+		
+		valuesDict[u'excludeFilterEvents'] = list()
 	
-		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
-	def selectedTriggerIncludeFilterSave(self, valuesDict=None, typeId="", targetId=0):
-		if self.ed: self.logger.debug(u'CALL selectedTriggerIncludeFilterSave')
+		
+	# 	def selectedTriggerFilterChangedEventSelection(self, valuesDict=None, typeId="", targetId=0):
+	# 		if self.ed: self.logger.debug(u'CALL selectedTriggerFilterChangedEventSelection')
+	# 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+	# 		if self.ed: self.logger.debug(u'typeId: %s' % typeId)
+	# 		if self.ed: self.logger.debug(u'targetId: %s' % targetId)
+	# 	
+	# 		#self.logger.debug(u'return valuesDict: %s' % unicode(valuesDict))
+	# 		return valuesDict
+
+	def x71receivedSelectedIncludeFilterSave(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterSave(u'includeFilter', valuesDict, typeId, targetId)
+		return valuesDict
+		
+	def x71receivedSelectedExcludeFilterSave(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterSave(u'excludeFilter', valuesDict, typeId, targetId)
+		return valuesDict		
+		
+	def selectedFilterSave(self, type, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedFilterSave')
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		
 		errorMsg = list()
 		valError = False
 		filterAction = ''
+		
+		if type == u'includeFilter':
+			typeC = u'IncludeFilter'
+		elif type == u'excludeFilter':
+			typeC = u'ExcludeFilter'
+		else:
+			self.logger.error(u'Unexpected filter type in selectedFilterSave')
+			return valuesDict
 
-		if valuesDict[u'selectedIncludeFilter'] == u'_createNew': filterAction = 'new' # Saving new filter
-		elif valuesDict[u'selectedIncludeFilter'] != u'_blank': filterAction = 'modify' #Modifying existing filter
-		elif valuesDict[u'selectedIncludeFilter'] == u'_blank': filterAction = 'blank' #No filter selected
+		if valuesDict[u'selected'+typeC] == u'_createNew': filterAction = 'new' # Saving new filter
+		elif valuesDict[u'selected'+typeC] != u'_blank': filterAction = 'modify' #Modifying existing filter
+		elif valuesDict[u'selected'+typeX] == u'_blank': filterAction = 'blank' #No filter selected
 		
 		if filterAction == 'new' or filterAction == 'modify':
-			includeFilters = self.load(valuesDict.get(u'includeFilters', self.store(list())))
+			filterList = self.load(valuesDict.get(type+u's', self.store(list())))
 			
 			if filterAction == 'new':
 				self.logger.debug(u'Saving new filter..')
 				currFilter = {}
 			elif filterAction == 'modify':
 				self.logger.debug(u'Modifying existing filter..')
-				currFilter = includeFilters[int(valuesDict[u'selectedIncludeFilter'])]
+				currFilter = filterList[int(valuesDict[u'selected'+typeC])]
 			
 			# Filter name
-			if len(valuesDict[u'includeFilterName']) > 0:
-				currFilter[u'name'] = valuesDict[u'includeFilterName']
+			if len(valuesDict[type+u'Name']) > 0:
+				currFilter[u'name'] = valuesDict[type+u'Name']
 			else:
 				errorMsg.append(u'Please specify a filter name')
 				valError = True
 			
 			# Filter alarm types
-			if not valuesDict[u'includeFilterType'] in self.zDefs[u'0x71'][u'types'] and valuesDict[u'includeFilterType'] != u'all':
+			if not valuesDict[type+u'Type'] in self.zDefs[u'0x71'][u'types'] and valuesDict[type+u'Type'] != u'all':
 				errorMsg.append(u'Invalid or no alarm/notification type selected')
 				valError = True
-			currFilter[u'type'] = valuesDict[u'includeFilterType']
+			currFilter[u'type'] = valuesDict[type+u'Type']
 			
 			# Filter events
-			if u'all' in valuesDict[u'includeFilterEvents']:
+			if u'all' in valuesDict[type+u'Events']:
 				currFilter[u'events'] = u'all'
-			elif len(valuesDict[u'includeFilterEvents']) > 0:
-				currFilter[u'events'] = list(valuesDict[u'includeFilterEvents']) # need to convert indigo list to python list, for json
+			elif len(valuesDict[type+u'Events']) > 0:
+				currFilter[u'events'] = list(valuesDict[type+u'Events']) # need to convert indigo list to python list, for json
 			else:
 				errorMsg.append(u'Invalid or no event selected')
 				valError = True
@@ -443,28 +492,75 @@ class Plugin(indigo.PluginBase):
 			if self.ed: self.logger.debug(u'currFilter: %s' % unicode(currFilter))
 			
 			if valError:
-				valuesDict[u'includeFilterStatus'] = '\n'.join(errorMsg)
-				valuesDict[u'showIncludeFilterStatus'] = True
+				valuesDict[type+u'Status'] = '\n'.join(errorMsg)
+				valuesDict[u'show'+typeC+u'Status'] = True
 			else:
-				if filterAction == 'new':
-					includeFilters.append(currFilter)
-					valuesDict[u'includeFilters'] = self.store(includeFilters)
-					valuesDict[u'selectedIncludeFilter'] = unicode(len(includeFilters)-1)
-					valuesDict[u'includeFilterStatus'] = 'Saved'
-					valuesDict[u'showIncludeFilterStatus'] = True
-				elif filterAction == 'modify':
-					valuesDict[u'includeFilters'] = self.store(includeFilters)
-					valuesDict[u'includeFilterStatus'] = 'Modified'
-					valuesDict[u'showIncludeFilterStatus'] = True
-		elif filterAction == 'blank':
-			valuesDict[u'includeFilterStatus'] = 'Please select a filter before saving'
-			valuesDict[u'showIncludeFilterStatus'] = True
-			
+				try:
+					if filterAction == 'new':
+						filterList.append(currFilter)
+						valuesDict[type+u's'] = self.store(filterList)
+						valuesDict[u'selected'+typeC] = unicode(len(filterList)-1)
+						valuesDict[type+u'Status'] = 'Saved'
+						valuesDict[u'show'+typeC+u'Status'] = True
+					elif filterAction == 'modify':
+						valuesDict[type+u's'] = self.store(filterList)
+						valuesDict[type+u'Status'] = 'Modified'
+						valuesDict[u'show'+typeC+u'Status'] = True
+				except:
+					self.logger.exception(u'Could not save filter: %s' % (unicode(currFilter)))
 					
+		elif filterAction == 'blank':
+			valuesDict[type+u'Status'] = 'Please select a filter before saving'
+			valuesDict[u'show'+typeC+u'Status'] = True
 			
 		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
 		return valuesDict
 		
+	def x71receivedSelectedIncludeFilterDelete(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterDelete(u'includeFilter', valuesDict, typeId, targetId)
+		return valuesDict
+		
+	def x71receivedSelectedExcludeFilterDelete(self, valuesDict=None, typeId="", targetId=0):
+		valuesDict = self.selectedFilterDelete(u'excludeFilter', valuesDict, typeId, targetId)
+		return valuesDict		
+		
+	def selectedFilterDelete(self, type, valuesDict=None, typeId="", targetId=0):
+		if self.ed: self.logger.debug(u'CALL selectedFilterDelete')
+		if self.ed: self.logger.debug(u'valuesDict: %s' % unicode(valuesDict))
+		
+		errorMsg = list()
+		valError = False
+		filterAction = ''
+		
+		if type == u'includeFilter':
+			typeC = u'IncludeFilter'
+		elif type == u'excludeFilter':
+			typeC = u'ExcludeFilter'
+		else:
+			self.logger.error(u'Unexpected filter type in selectedFilterSave')
+			return valuesDict
+			
+		filterList = self.load(valuesDict.get(type+u's', self.store(list())))
+		
+		try:
+			deletedFilter = filterList.pop(int(valuesDict[u'selected'+typeC]))
+			self.logger.debug(u'Deleted filter "%s"'  % (deletedFilter[u'name']))
+			valuesDict[type+u's'] = self.store(filterList)
+			valuesDict[type+u'Status'] = 'Filter "%s" deleted' % (deletedFilter[u'name'])
+			valuesDict[u'show'+typeC+u'Status'] = True
+			# Clear values from UI
+			valuesDict[type+u'Name'] = ''
+			valuesDict[type+u'Type'] = ''
+			valuesDict[type+u'Events'] = list()
+			valuesDict[u'selected'+typeC] = u'_blank'
+		except:
+			self.logger.exception(u'Could not delete filter')
+			valuesDict[type+u'Status'] = 'Error: Could not delete filter'
+			valuesDict[u'show'+typeC+u'Status'] = True
+			
+		return valuesDict
+		
+
 
 	########################################
 	# UI VALIDATION
@@ -500,6 +596,14 @@ class Plugin(indigo.PluginBase):
 		valuesDict[u'includeFilterType'] = ''
 		valuesDict[u'includeFilterEvents'] = list()
 		valuesDict[u'selectedIncludeFilter'] = u'_blank'
+		
+		valuesDict[u'excludeFilterStatus'] = ''
+		valuesDict[u'showExcludeFilterStatus'] = False
+		valuesDict[u'excludeFilterName'] = ''
+		valuesDict[u'excludeFilterType'] = ''
+		valuesDict[u'excludeFilterEvents'] = list()
+		valuesDict[u'selectedExcludeFilter'] = u'_blank'
+		
 		return (True, valuesDict, errorDict)
 		
 		
