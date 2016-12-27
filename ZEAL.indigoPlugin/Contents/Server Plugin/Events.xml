@@ -10,14 +10,14 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
 				</Label>
         	</Field>
         	<Field id="separator1" type="separator"/>
-        	<Field type="menu" id="devMethod" defaultValue="all">
+        	<Field type="menu" id="triggerFor" defaultValue="all">
         		<Label>Trigger for:</Label>
         		<List>
         			<Option value="selected">Selected devices</Option>
-        			<Option value="all">All devices</Option>
+        			<Option value="all">All Z-wave devices</Option>
         		</List>
         	</Field>
-        	<Field type="list" id="selectedDevices" rows="6" visibleBindingId="devMethod" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
         		<Label>Select devices:</Label>
         		<List class="indigo.devices" filter="indigo.zwave"/>
         	</Field>
@@ -32,7 +32,7 @@ Inclusion filters</Label>
         	<Field type="menu" id="selectedIncludeFilter" default="_blank">
         		<Label>Select 
 Filter:</Label>
-        		<List class="self" filter="includeFilters" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="includeFilters" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedIncludeFilterChangedFilterSelection</CallbackMethod>
         	</Field>
         	<Field type="textfield" id="includeFilterName">
@@ -41,12 +41,12 @@ Filter:</Label>
         	<Field type="menu" id="includeFilterType" default="all">
         		<Label>Alarm/
 notification types:</Label>
-        		<List class="self" filter="alarmTypes" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="alarmTypes" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedIncludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
         	<Field type="list" id="includeFilterEvents" default="all" rows="6">
         		<Label>Events:</Label>
-        		<List class="self" filter="eventsInclude" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="eventsInclude" method="getUIList" dynamicReload="true"/>
 				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
         	</Field>
         	<Field type="textfield" id="includeFilterStatus" default="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
@@ -75,7 +75,7 @@ Exclusion filters</Label>
         	<Field type="menu" id="selectedExcludeFilter" default="_blank">
         		<Label>Select 
 Filter:</Label>
-        		<List class="self" filter="excludeFilters" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="excludeFilters" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedExcludeFilterChangedFilterSelection</CallbackMethod>
         	</Field>
         	<Field type="textfield" id="excludeFilterName">
@@ -84,12 +84,12 @@ Filter:</Label>
         	<Field type="menu" id="excludeFilterType" default="all">
         		<Label>Alarm/
 notification types:</Label>
-        		<List class="self" filter="alarmTypes" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="alarmTypes" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedExcludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
         	<Field type="list" id="excludeFilterEvents" default="all" rows="6">
         		<Label>Events:</Label>
-        		<List class="self" filter="eventsExclude" method="getTriggerList" dynamicReload="true"/>
+        		<List class="self" filter="eventsExclude" method="getUIList" dynamicReload="true"/>
 				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
         	</Field>
         	<Field type="textfield" id="excludeFilterStatus" default="" readonly="true" visibleBindingId="showExcludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
