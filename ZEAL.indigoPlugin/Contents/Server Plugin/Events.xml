@@ -2,7 +2,7 @@
 <Events>
     <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
     <Event id="x71received">
-        <Name>Received Z-Wave Alarm/Notification</Name>
+        <Name>Received Z-Wave Alarm/Notification v2-v8</Name>
         <ConfigUI>
         	<Field type="label" id="intro">
         		<Label>
