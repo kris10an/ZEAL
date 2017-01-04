@@ -8,7 +8,7 @@
 			<Field id="trigger" type="menu">
 				<Label>Select trigger to reset:</Label>
 				<List class="indigo.triggers" filter="com.kris10an.indigoplugin.zeal.x80received" dynamicReload="true"/>
-				<!--CallbackMethod>x80receivedResetTriggerChanged</CallbackMethod-->
+				<CallbackMethod>x80receivedResetTriggerChanged</CallbackMethod>
 			</Field>
 			<Field id="resetDevice" type="menu">
 				<Label>Select device to reset:</Label>

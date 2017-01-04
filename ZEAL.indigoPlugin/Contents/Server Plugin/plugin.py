@@ -815,52 +815,54 @@ class Plugin(indigo.PluginBase):
 		return valuesDict
 		
 
-	def resetTriggerBatteryLevel(self, type, valuesDict=None, typeId="", targetId=0):
+	###############################
+	# x80received
+	###############################
+		
+	def x80receivedResetTriggerChanged(self, valuesDict=None, typeId="", targetId=0):
+		# FIX, device list won't update without this function, don't understand quite why
+		return valuesDict
+
+
+	def resetTriggerBatteryLevel(self, action):
 		self.extDebug(u'CALL resetTriggerBatteryLevel')
-		self.extDebug(u'valuesDict: %s' % unicode(valuesDict))
-		self.extDebug(u'typeId: %s' % typeId)
-		self.extDebug(u'targetId: %s' % targetId)
+		self.extDebug(u'action: %s' % unicode(action))
+		
+		props = action.props
 		
 		try:
-			if u'trigger' in valuesDict:
-				trigger = indigo.triggers[int(valuesDict[u'trigger'])]
-			else:
-				self.logger.warn(u'No trigger selected')
-				#errorDict[u'trigger'] = u'No trigger selected'
-				# FIX, apparently can't return valuesDict when empty (??)
-				#return (False, valuesDict, errorDict)
-				return False
+			trigger = indigo.triggers[int(props[u'trigger'])]
 		except:
 			self.logger.error(u'Could not get selected trigger from Indigo')
-			#errorDict[u'trigger'] = u'Could not get selected trigger from Indigo'
-			# FIX, apparently can't return valuesDict when empty (??)
-			#return (False, valuesDict, errorDict)
+			raise
 			return False
 		
-		props = trigger.pluginProps
-		
 		try:
-			dev = indigo.devices[int(valuesDict[u'resetDevice'])]
+			dev = indigo.devices[int(props['resetDevice'])]
 		except:
 			self.logger.error(u'Could not get selected device from Indigo')
-			errorDict[u'resetDevice'] = u'Could not get device from Indigo'
-			return (False, valuesDict, errorDict)
-		# 		
-		# 		if props[u'triggerFor'] == u'all':
-		# 			devIter = indigo.devices.iter('indigo.zwave')
-		# 		elif props[u'triggerFor'] == u'selected':
-		# 			devIter = [indigo.devices[int(d)] for d in props[u'devices']]
-		# 		else:
-		# 			self.logger.warn(u'Trigger seems to be mis-configured, please check trigger configuration')
-		# 			return myArray
-		# 
-		# 		for dev in devIter:
-		# 			devArray.append ( (dev.id,dev.name) )
-		# 			
-		# 		sortedDevArray = sorted ( devArray, key = operator.itemgetter(1))
-		# 
-		# 		myArray = sortedDevArray
+			raise
+			return False
+			
+		self.logger.info(u'Resetting battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
 		
+		pluginProps = trigger.pluginProps
+		triggeredDeviceList = self.load(pluginProps.get(u'triggeredDeviceList', self.store(list())))
+		self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
+		
+		if int(dev.address) in triggeredDeviceList:
+			self.logger.info(u'Device node %03d found in list of triggered devices for selected trigger' % (int(dev.address)))
+			try:
+				triggeredDeviceList = [d for d in triggeredDeviceList if d != int(dev.address)]
+				pluginProps[u'triggeredDeviceList'] = triggeredDeviceList
+				self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+				trigger.replacePluginPropsOnServer(pluginProps)
+				self.logger.info(u'Reset device battery level trigger')
+			except:
+				self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+				raise
+		else:
+			self.logger.info(u'Device not found in list of triggered devices for selected trigger, not performing anything')		
 		
 		return True
 
