@@ -7,7 +7,7 @@ import indigo
 import os
 import sys
 import logging
-import json
+import json, operator
 #import csv,codecs,cStringIO
 from csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 from collections import defaultdict
@@ -30,7 +30,8 @@ zDefs = {
 
 # Events to command class
 eventCC = {
-	u'x71received'				: u'0x71'
+	u'x71received'				: u'0x71',
+	u'x80received'				: u'0x80'
 	}
 	
 zFolder = u'Z-Wave'
@@ -72,12 +73,10 @@ def treeDD():
 # Iterate through dct and remove references to triggerID
 def removeTriggerFromDict(d, triggerId):
 	for k, v in d.iteritems():
-		# FIX 'triggers' is a list
 		if isinstance(v, dict):
-			v = removeTriggerFromDict(v, triggerId)
+			d[k] = removeTriggerFromDict(v, triggerId)
 		elif k == u'triggers':
-			tmpList = [t for t in v if t != triggerId]
-			v = tmpList			
+			d[k] = [t for t in v if t != triggerId]
 		else:
 			raise ValueError(u'Possible error in triggerMap dictionary, v: %s' % unicode(v))
 	return d
@@ -118,7 +117,9 @@ class Plugin(indigo.PluginBase):
 		# map z-wave nodes and commands to indigo triggers
 		
 		indigo.zwave.subscribeToIncoming()
-		indigo.zwave.subscribeToOutgoing()
+		if self.extensiveDebug: # no need to subscribe normally, may be useful for debugging
+			indigo.zwave.subscribeToOutgoing()
+		# FIX, don't know any command to unsubscribe from outgoing z-wave commands
 		
 	########################################
 	def shutdown(self):
@@ -176,53 +177,113 @@ class Plugin(indigo.PluginBase):
 	########################################
 	def zwaveCommandReceived(self, cmd):
 		byteList = cmd['bytes']			# List of the raw bytes just received. Integer values
-		byteListStr = convertListToHexStr(byteList)
-		byteListHexStr = convertListToHexStrList(byteList)
-		nodeId = cmd['nodeId']			# Can be None! Integer
-		endpoint = cmd['endpoint']		# Often will be None! Integer (??)
-		CC = byteListHexStr[7] 			# Command class
+		CC = hexStr(byteList[7]) 			# Command class
 		
 		#self.logger.debug(byteListHexStr)
 		#self.logger.debug(type(endpoint))
 		#self.logger.debug(type(byteList[7]))
 		
 		if CC in self.zDefs:
+			byteListStr = convertListToHexStr(byteList)
+			byteListHexStr = convertListToHexStrList(byteList)
+			nodeId = cmd['nodeId']			# Can be None! Integer
+			endpoint = cmd['endpoint']		# Often will be None! Integer (??)
 			# Notification report
 			if CC == u'0x71' and byteList[8] == 5:
-				if byteList[9] != 0: # Alarm command version '
+				if byteList[9] != 0: # Alarm command version 1
 					self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
 					self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 					self.logger.debug(u'Command:			%s' % (byteList[8]))
 					self.logger.debug(u'V1 Alarm Type:		%s' % (byteList[9]))
 					self.logger.debug(u'V1 Alarm Level:		%s' % (byteList[10]))
-					self.logger.error(u'error')
+					
+					dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
+					if dev: devName = dev.name
+					else: devName = u'node id ' + unicode(nodeId)
+					
+					self.logger.info(u'Received "%s" alarm report (v1), alarm type %d, alarm level %d' % (devName, byteList[9], byteList[10]))
 					# FIX trigger
 				else: # Notification command version 2-8
+					# FIX use descriptions from zDefs
 					self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
 					self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 					self.logger.debug(u'Command:			%s' % (byteList[8]))
 					self.logger.debug(u'Notification Status: %s' % (byteList[12]))
 					self.logger.debug(u'Notification Type:	%s (%s)' % (byteList[13], self.zDefs[CC][u'types'][byteListHexStr[13]][u'description']))
 					self.logger.debug(u'Event:				%s (%s)' % (byteList[14], safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description')))
+					
 					# FIX, also include sequence number
+					# FIX, notification status
 					if len(byteList) >= 18:
-						#eventParmStr = u''
-						#i = 16
-						#while i < len(byteList)-1:
-						#	eventParmStr = eventParmStr + unicode(byteList[i])
-						#	i += 1
-						self.logger.debug(u'Event Parameters:	%s (%s)' % (u' '.join([u'{:02d}'.format(int(byteList[i])) for i in xrange(16,len(byteList)-1)]), safeGet(self.zDefs, u'No description', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'parameterText')))
-					for triggerId in self.triggerMap[nodeId][u'byte13'][hexStr(byteList[13])][u'byte14'][hexStr(byteList[14])].get(u'triggers', list()):
+						eventParms = u' '.join([u'{:02d}'.format(int(byteList[i])) for i in xrange(16,len(byteList)-1)])
+						eventParmStr = u', event parameters ' + eventParms
+						self.logger.debug(u'Event Parameters:	%s (%s)' % (eventParms, safeGet(self.zDefs, u'No description', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'parameterText')))
+					else:
+						eventParmStr = u''
+
+					dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
+					if dev: devName = dev.name
+					else: devName = u'node id ' + unicode(nodeId)
+					
+					self.logger.info(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
+					
+					for triggerId in self.triggerMap[nodeId][CC][u'byte13'][hexStr(byteList[13])][u'byte14'][hexStr(byteList[14])].get(u'triggers', list()):
 						trigger = indigo.triggers[triggerId]
 						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+						indigo.trigger.execute(trigger)
 			# Battery report
-			elif CC == u'0x80':
+			elif CC == u'0x80' and byteList[8] == 3: # Battery report
 				self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
 				self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 				self.logger.debug(u'Command:			%s' % (byteList[8]))
 				self.logger.debug(u'Battery level:		%s' % (byteList[9]))
+				d = self.triggerMap[nodeId][CC].get(u'triggers', list())
+				self.logger.debug(unicode(d))
+				for triggerId in self.triggerMap[nodeId][CC].get(u'triggers', list()):
+					# FIX, check conditions
+					trigger = indigo.triggers[triggerId]
+					props = trigger.pluginProps
+					try:
+						triggeredDeviceList = self.load(props.get(u'triggeredDeviceList', self.store(list())))
+					except TypeError:
+						triggeredDeviceList = list()
+					
+					if byteList[9] == 255 and props[u'triggerLowBatteryReport']: # trigger on low battery report
+						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+						indigo.trigger.execute(trigger)
+					elif props[u'triggerBatteryLevel'] and byteList[9] <= int(props[u'batteryLevel']): # trigger on battery level
+						self.logger.debug(u'Received battery level below trigger threshold, node id %03d, battery level %d' % (nodeId, byteList[9]))
+						# Check if previously triggered for node, skip if previously triggered
+
+						if (nodeId and nodeId not in triggeredDeviceList) or props[u'batteryLevelResetOn'] == u'always':
+							self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+							indigo.trigger.execute(trigger)
+							if nodeId not in triggeredDeviceList:
+								triggeredDeviceList.append(nodeId)
+								props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
+								trigger.replacePluginPropsOnServer(props)
+							self.extDebug(u'localProps: %s' % unicode(props))
+							# FIX, double check if more logic needs to be added
+							
+					elif props[u'triggerBatteryLevel'] and props[u'batteryLevelResetOn'] == u'levelAbove' and byteList[9] >= int(props[u'batteryLevelResetLevel']) and (nodeId in triggeredDeviceList):
+						# battery level above reset level, and configured to reset when battery level is above set point
+						#if u'triggeredDeviceList' not in props:
+						#	props[u'triggeredDeviceList'] = list()
+						
+						# 						tmpNodeList = list()
+						# 						for n in triggeredDeviceList:
+						# 							if n != nodeId:
+						# 								tmpNodeList.append(n)
+						tmpNodeList = [n for n in triggeredDeviceList if n != nodeId]
+						props[u'triggeredDeviceList'] = self.store(tmpNodeList)
+						self.extDebug(u'localProps: %s' % unicode(props))
+						trigger.replacePluginPropsOnServer(props)
+						
+						self.logger.info(u'Battery level above reset threshold for node id %s, reset trigger id %s "%s" for node' % (unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))				
+							
 
 	def zwaveCommandSent(self, cmd):
+	
 		byteList = cmd['bytes']			# List of the raw bytes just sent.
 		byteListStr = convertListToHexStr(byteList)
 		timeDelta = cmd['timeDelta']	# The time duration it took to receive an Z-Wave ACK for the command.
@@ -248,7 +309,7 @@ class Plugin(indigo.PluginBase):
 	def triggerStopProcessing(self, trigger):
 		self.logger.debug(u'Stop processing trigger "%s"' % (unicode(trigger.name)))
 		
-		#self.getZwaveNodeTriggerMap(trigger, u'stop')
+		self.getZwaveNodeTriggerMap(trigger, u'stop')
 
 	#####
 	# Read Z-wave commands and defs from supporting files
@@ -296,6 +357,7 @@ class Plugin(indigo.PluginBase):
 	def getZwaveNodeDevMap(self):
 	
 		# FIX, may be redundant when using only triggers for received commands
+		# FIX, consider making this through getZwaveNodeTriggerMap
 	
 		self.logger.debug(u'Mapping Z-wave nodes to indigo devices')
 		# get all nodes already in zNodes, avoid to have to delete zNodes dict and temporarily risk having empty zNodes dict
@@ -343,7 +405,7 @@ class Plugin(indigo.PluginBase):
 			if 1 in self.zNodes[node] and not None in self.zNodes[node]:
 				# Has endpoint 1, but not None, copy 1 to None
 				self.zNodes[node][None] = self.zNodes[node][1]
-				self.extDebug(u'Device id %s "%s" has no device with endpoint None - copied from 1' % (unicode(dev.id), unicode(dev.name)))
+				self.extDebug(u'Device id %s "%s" has no device with endpoint None - copied from 1' % (unicode(self.zNodes[node][None].id), unicode(self.zNodes[node][None].name)))
 		
 		self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices. Skipped %s disabled devices' % (unicode(len(self.zNodes)), unicode(nSkipped)))
 		#self.extDebug(u'zNodes dict:\n%s' % unicode(self.zNodes))
@@ -352,23 +414,28 @@ class Plugin(indigo.PluginBase):
 	# Map Z-wave nodes to triggers
 	#
 	def getZwaveNodeTriggerMap(self, trigger, action=u'start'):
-		self.logger.debug(u'Mapping Z-wave nodes to trigger "%s"' % (trigger.name))
+		self.logger.debug(u'Mapping or removing Z-wave nodes to/from trigger "%s"' % (trigger.name))
 		
 		# First, remove all references to trigger
 		try:
 			self.triggerMap = removeTriggerFromDict(self.triggerMap, trigger.id)
+			self.extDebug(u'Removed references to trigger id %s from triggerMap' % (unicode(trigger.id)))
 		except:
-			self.logger.debug(u'Could not remove trigger from triggerMap dictionary')
+			self.logger.error(u'Could not remove trigger from triggerMap dictionary')
 			raise
 		
+		# Only add references in triggerMap when starting trigger processing. When disabling triggers this part will be skipped.
 		if action == u'start':
+			self.extDebug(u'start')
 			props = trigger.pluginProps
 			m = self.triggerMap
 			tmpMap = dict()
 			cmdList = set()
+			tType = trigger.pluginTypeId
 		
-			includeFilters = self.load(props.get(u'includeFilters',self.store(list())))
-			excludeFilters = self.load(props.get(u'excludeFilters',self.store(list())))
+			if tType in [u'x71received']:
+				includeFilters = self.load(props.get(u'includeFilters',self.store(list())))
+				excludeFilters = self.load(props.get(u'excludeFilters',self.store(list())))
 		
 			CC = eventCC[trigger.pluginTypeId]
 		
@@ -378,29 +445,55 @@ class Plugin(indigo.PluginBase):
 				devIter = [indigo.devices[int(d)] for d in props[u'devices']]
 			
 			for dev in devIter:
-				self.extDebug(u'Mapping device id %s "%s", node %s' % (unicode(dev.id), unicode(dev.name), unicode(dev.address)))
+				self.extDebug(u'Mapping trigger for device id %s "%s", node %s' % (unicode(dev.id), unicode(dev.name), unicode(dev.address)))
 				addr = int(dev.address)
 				#if dev.address not in m: m[dev.address] = dict()
 				
-				if trigger.pluginTypeId == u'x71received':
+				if tType == u'x71received':
+					# Inclusion filters, add to triggerMap
 					for filter in includeFilters:
 						if filter[u'type'] == u'all':
 							for alarmType in self.zDefs[CC][u'types']:
 								#if u'byte13' not in m[dev.address]: m[dev.address][u'byte13'] = dict()
 								#if alarmType not in m[dev.address][u'byte13']: m[dev.address][u'byte13'][alarmType] = dict()
 								#if u'byte14' not in m[dev.address][u'byte13'][alarmType]: m[dev.address][u'byte13'][alarmType][u'byte14'] = dict()
-								# FIX add events, add when type is not all
 								for event in self.zDefs[CC][u'types'][alarmType][u'events']:
-									if u'triggers' not in m[addr][u'byte13'][alarmType][u'byte14'][event]:
-										m[addr][u'byte13'][alarmType][u'byte14'][event][u'triggers'] = list()
-									m[addr][u'byte13'][alarmType][u'byte14'][event][u'triggers'].append(trigger.id)
-									self.extDebug(u'Mapping trigger type %s, id %s to dev address %s, alarm type %s, event %s' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address), unicode(alarmType), unicode(event)))
+									if u'triggers' not in m[addr][CC][u'byte13'][alarmType][u'byte14'][event]:
+										m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'] = list()
+									if trigger.id not in m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers']:
+										m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'].append(trigger.id)
+									#self.extDebug(u'(Inclusion filter-all alarm types) Mapping trigger type %s, id %s to dev address %s, alarm type %s, event %s' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address), unicode(alarmType), unicode(event)))
+						else:
+							alarmType = filter[u'type']
+							for event in filter[u'events']:
+								if u'triggers' not in m[addr][CC][u'byte13'][alarmType][u'byte14'][event]:
+									m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'] = list()
+								if trigger.id not in m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers']:
+									m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'].append(trigger.id)
+								#self.extDebug(u'(Inclusion filter) Mapping trigger type %s, id %s  to dev address %s, alarm type %s, event %s' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address), unicode(alarmType), unicode(event)))
+					# Exclusion filters, remove from triggerMap dict
+					for filter in excludeFilters:
+						alarmType = filter[u'type']
+						for event in filter[u'events']:
+							if u'triggers' in m[addr][CC][u'byte13'][alarmType][u'byte14'][event]:
+								m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'] = [tId for tId in m[addr][CC][u'byte13'][alarmType][u'byte14'][event][u'triggers'] if tId != trigger.id]
+							#self.extDebug(u'(Exclusion filter)Mapping trigger type %s, id %s  to dev address %s, alarm type %s, event %s' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address), unicode(alarmType), unicode(event)))
 								
-			#self.extDebug(u'triggerMap: %s' % (unicode(m)))
-								
-								
+				elif tType == u'x80received':
+					if props[u'triggerLowBatteryReport'] or props[u'triggerBatteryLevel']:
+						#self.extDebug(u'Mapping trigger type %s, id %s to dev address %s, battery report' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address)))
+						if u'triggers' not in m[addr][CC]:
+							m[addr][CC][u'triggers'] = list()
+						if trigger.id not in m[addr][CC][u'triggers']:
+							m[addr][CC][u'triggers'].append(trigger.id)
+					else:
+						pass
+						#self.extDebug(u'Skipping trigger type %s, id %s to dev address %s, battery report' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address)))
+						
+					
 			
-		# FIX remember to add logic for disabled triggers	
+		self.logger.debug(u'Finished mapping Z-wave nodes to trigger "%s"' % (trigger.name))			
+		#self.extDebug(u'triggerMap: %s' % (unicode(m)))
 		
 	########################################
 	# Actions
@@ -429,9 +522,11 @@ class Plugin(indigo.PluginBase):
 			myArray = [
 				(u"_blank",u" "),
 				(u"_createNew",u"Create new filter...")]
-		elif filter in [u'alarmTypes', u'eventsInclude', u'eventsExclude']:
+		elif filter in [u'alarmTypesInclude', u'eventsInclude', u'eventsExclude']:
 			myArray = [
 				(u"all",u"All")]
+		elif filter in [u'alarmTypesExclude', u'x80resetDeviceList']:
+			myArray = list()
 			
 		tmpArray = list()
 			
@@ -442,9 +537,11 @@ class Plugin(indigo.PluginBase):
 				for filterNum, filterDict in enumerate(filterList):
 					#self.logger.debug(u'k: %s, v: %s' % (k,v))
 					tmpArray.append( (filterNum,filterDict['name']) )
-		elif filter == u'alarmTypes':
+		
+		elif filter == u'alarmTypesInclude' or filter == u'alarmTypesExclude':
 			for cmdType, cmdTypeDict in self.zDefs[u'0x71'][u'types'].items():
 				tmpArray.append( (cmdType,safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
+		
 		elif filter == u'eventsInclude' or filter == u'eventsExclude':
 			if filter == u'eventsInclude': typeKey = u'includeFilterType'
 			elif filter == u'eventsExclude': typeKey = u'excludeFilterType'
@@ -463,6 +560,36 @@ class Plugin(indigo.PluginBase):
 				myArray = [(u"all",u"All")]
 				for event, eventDict in self.zDefs[u'0x71'][u'types'][valuesDict[typeKey]][u'events'].items():
 					tmpArray.append( (event,unicode(event) + u' - ' + safeGet(eventDict, u'Unspecified event', u'description')) )
+		
+		elif filter == u'x80resetDeviceList':
+			try:
+				if u'trigger' in valuesDict:
+					trigger = indigo.triggers[int(valuesDict[u'trigger'])]
+				else:
+					self.extDebug(u'no trigger selected')
+					return myArray
+			except:
+				self.logger.error(u'Could not get selected trigger from Indigo')
+				return myArray
+			
+			props = trigger.pluginProps
+			devArray = list()
+			
+			if props[u'triggerFor'] == u'all':
+				devIter = indigo.devices.iter('indigo.zwave')
+			elif props[u'triggerFor'] == u'selected':
+				devIter = [indigo.devices[int(d)] for d in props[u'devices']]
+			else:
+				self.logger.warn(u'Trigger seems to be mis-configured, please check trigger configuration')
+				return myArray
+
+			for dev in devIter:
+				devArray.append ( (dev.id,dev.name) )
+				
+			sortedDevArray = sorted ( devArray, key = operator.itemgetter(1))
+
+			myArray = sortedDevArray
+
 		
 		tmpArray.sort()
 		myArray = myArray + tmpArray
@@ -688,6 +815,57 @@ class Plugin(indigo.PluginBase):
 		return valuesDict
 		
 
+	def resetTriggerBatteryLevel(self, type, valuesDict=None, typeId="", targetId=0):
+		self.extDebug(u'CALL resetTriggerBatteryLevel')
+		self.extDebug(u'valuesDict: %s' % unicode(valuesDict))
+		self.extDebug(u'typeId: %s' % typeId)
+		self.extDebug(u'targetId: %s' % targetId)
+		
+		try:
+			if u'trigger' in valuesDict:
+				trigger = indigo.triggers[int(valuesDict[u'trigger'])]
+			else:
+				self.logger.warn(u'No trigger selected')
+				#errorDict[u'trigger'] = u'No trigger selected'
+				# FIX, apparently can't return valuesDict when empty (??)
+				#return (False, valuesDict, errorDict)
+				return False
+		except:
+			self.logger.error(u'Could not get selected trigger from Indigo')
+			#errorDict[u'trigger'] = u'Could not get selected trigger from Indigo'
+			# FIX, apparently can't return valuesDict when empty (??)
+			#return (False, valuesDict, errorDict)
+			return False
+		
+		props = trigger.pluginProps
+		
+		try:
+			dev = indigo.devices[int(valuesDict[u'resetDevice'])]
+		except:
+			self.logger.error(u'Could not get selected device from Indigo')
+			errorDict[u'resetDevice'] = u'Could not get device from Indigo'
+			return (False, valuesDict, errorDict)
+		# 		
+		# 		if props[u'triggerFor'] == u'all':
+		# 			devIter = indigo.devices.iter('indigo.zwave')
+		# 		elif props[u'triggerFor'] == u'selected':
+		# 			devIter = [indigo.devices[int(d)] for d in props[u'devices']]
+		# 		else:
+		# 			self.logger.warn(u'Trigger seems to be mis-configured, please check trigger configuration')
+		# 			return myArray
+		# 
+		# 		for dev in devIter:
+		# 			devArray.append ( (dev.id,dev.name) )
+		# 			
+		# 		sortedDevArray = sorted ( devArray, key = operator.itemgetter(1))
+		# 
+		# 		myArray = sortedDevArray
+		
+		
+		return True
+
+		
+
 
 	########################################
 	# UI VALIDATION
@@ -695,7 +873,7 @@ class Plugin(indigo.PluginBase):
 	
 	# Validate plugin prefs changes:
 	def validatePrefsConfigUi(self, valuesDict):
-		self.logger.debug(u'CALL validatePrefsConfigUI, valuesDict: %s' % unicode(valuesDict))
+		self.extDebug(u'CALL validatePrefsConfigUI, valuesDict: %s' % unicode(valuesDict))
 		
 		errorDict = indigo.Dict()
 		'''if len(valuesDict[u'varFolderName']) == 0:
@@ -716,37 +894,80 @@ class Plugin(indigo.PluginBase):
 		# 		errorDict["someKey"] = "The value of this field must be from 1 to 10"
 		# 		errorDict[“showAlertText”] = “Some very descriptive message to your user that will help them solve the validation problem.”
 		
-		# Make sure selected values are reset
-		valuesDict[u'includeFilterStatus'] = ''
-		valuesDict[u'showIncludeFilterStatus'] = False
-		valuesDict[u'includeFilterName'] = ''
-		valuesDict[u'includeFilterType'] = ''
-		valuesDict[u'includeFilterEvents'] = list()
-		valuesDict[u'selectedIncludeFilter'] = u'_blank'
+		if typeId == u'x71received':
+			# Make sure selected values are reset
+			valuesDict[u'includeFilterStatus'] = ''
+			valuesDict[u'showIncludeFilterStatus'] = False
+			valuesDict[u'includeFilterName'] = ''
+			valuesDict[u'includeFilterType'] = ''
+			valuesDict[u'includeFilterEvents'] = list()
+			valuesDict[u'selectedIncludeFilter'] = u'_blank'
 		
-		valuesDict[u'excludeFilterStatus'] = ''
-		valuesDict[u'showExcludeFilterStatus'] = False
-		valuesDict[u'excludeFilterName'] = ''
-		valuesDict[u'excludeFilterType'] = ''
-		valuesDict[u'excludeFilterEvents'] = list()
-		valuesDict[u'selectedExcludeFilter'] = u'_blank'
+			valuesDict[u'excludeFilterStatus'] = ''
+			valuesDict[u'showExcludeFilterStatus'] = False
+			valuesDict[u'excludeFilterName'] = ''
+			valuesDict[u'excludeFilterType'] = ''
+			valuesDict[u'excludeFilterEvents'] = list()
+			valuesDict[u'selectedExcludeFilter'] = u'_blank'
 		
-		# FIX validation for device selection
+			# FIX validation for device selection
+			# FIX validation for not saving filter
+		
+		# FIX validation for battery report
 		
 		return (True, valuesDict, errorDict)
 		
+	def validateActionConfigUi(self, valuesDict=None, typeId='', deviceId=0):
+		self.extDebug(u'CALL validateActionConfigUi, valuesDict: %s' % unicode(valuesDict))
+		self.extDebug(u'typeId: %s' % typeId)
+		self.extDebug(u'deviceId: %s' % deviceId)
+		
+		errorDict = indigo.Dict()
+	
+		if typeId == u'resetTriggerBatteryLevel':
+			# Check trigger
+			try:
+				if u'trigger' in valuesDict and len(valuesDict[u'trigger']) > 0:
+					trigger = indigo.triggers[int(valuesDict[u'trigger'])]
+				else:
+					self.logger.warn(u'No trigger selected')
+					errorDict[u'trigger'] = u'Please select a trigger'
+					return (False, valuesDict, errorDict)
+			except:
+				self.logger.error(u'Could not get selected trigger from Indigo')
+				errorDict[u'trigger'] = u'Could not get selected trigger from Indigo'
+				return (False, valuesDict, errorDict)
+				
+			try:
+				if u'resetDevice' in valuesDict and len(valuesDict[u'resetDevice']) > 0:
+					dev = indigo.devices[int(valuesDict[u'resetDevice'])]
+				else:
+					self.logger.warn(u'No device selected')
+					errorDict[u'resetDevice'] = u'Please select a device'
+					return (False, valuesDict, errorDict)
+			except:
+				self.logger.error(u'Could not get selected device from Indigo')
+				errorDict[u'resetDevice'] = u'Could not get selected device from Indigo'
+				return (False, valuesDict, errorDict)
+				
+					
+				
+		return (True, valuesDict)
 		
 	# def getDeviceConfigUiValues():
 	# possible to get values of device config UI?	
 		
 	# Catch changes to config prefs
 	def closedPrefsConfigUi(self, valuesDict, userCancelled):
-		self.logger.debug(u'CALL closedPrefsConfigUi, valuesDict: %s' % unicode(valuesDict))
-		self.logger.debug(u'CALL closedPrefsConfigUi, userCancelled: %s' % unicode(userCancelled))
+		self.extDebug(u'CALL closedPrefsConfigUi, valuesDict: %s' % unicode(valuesDict))
+		self.extDebug(u'CALL closedPrefsConfigUi, userCancelled: %s' % unicode(userCancelled))
 		
 		self.setUpdatePluginPrefs(True)
 		
-		# DO VALIDATION
+		if self.extensiveDebug:
+			indigo.zwave.subscribeToOutgoing()
+	
+		# FIX DO VALIDATION
 		self.pluginConfigErrorState = False
 		
 	########################################

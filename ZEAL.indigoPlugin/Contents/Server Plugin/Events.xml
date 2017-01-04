@@ -1,6 +1,9 @@
 <?xml version="1.0"?>
 <Events>
     <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
+
+    <!-- ALARM/NOTIFICATION V2-V8 -->
+
     <Event id="x71received">
         <Name>Received Z-Wave Alarm/Notification v2-v8</Name>
         <ConfigUI>
@@ -24,7 +27,7 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
         	
         	<!-- INCLUSION FILTERS -->
         	
-        	<Field type="label" id="introInclude">
+        	<Field type="label" id="introInclude" fontColor="blue">
         		<Label>
 Inclusion filters</Label>
         	</Field>
@@ -41,7 +44,7 @@ Filter:</Label>
         	<Field type="menu" id="includeFilterType" default="all">
         		<Label>Alarm/
 notification types:</Label>
-        		<List class="self" filter="alarmTypes" method="getUIList" dynamicReload="true"/>
+        		<List class="self" filter="alarmTypesInclude" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedIncludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
         	<Field type="list" id="includeFilterEvents" default="all" rows="6">
@@ -67,7 +70,7 @@ notification types:</Label>
 			
 			<!-- EXCLUSION FILTERS -->
 			
-        	<Field type="label" id="introExclude">
+        	<Field type="label" id="introExclude" fontColor="blue">
         		<Label>
 Exclusion filters</Label>
         	</Field>
@@ -84,7 +87,7 @@ Filter:</Label>
         	<Field type="menu" id="excludeFilterType" default="all">
         		<Label>Alarm/
 notification types:</Label>
-        		<List class="self" filter="alarmTypes" method="getUIList" dynamicReload="true"/>
+        		<List class="self" filter="alarmTypesExclude" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedExcludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
         	<Field type="list" id="excludeFilterEvents" default="all" rows="6">
@@ -109,4 +112,56 @@ notification types:</Label>
 			</Field>
         </ConfigUI>
     </Event>
+    
+    <!-- BATTERY NOTIFICATION -->
+    
+    <Event id="x80received">
+        <Name>Received Battery report</Name>
+        <ConfigUI>
+        	<Field type="menu" id="triggerFor" defaultValue="all">
+        		<Label>Trigger for:</Label>
+        		<List>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="all">All Z-wave devices</Option>
+        		</List>
+        	</Field>
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        		<Label>Select devices:</Label>
+        		<List class="indigo.devices" filter="indigo.zwave"/>
+        	</Field>
+        	
+        	<Field type="label" id="introInclude" fontColor="blue">
+        		<Label>
+Trigger on</Label>
+        	</Field>
+        	<Field id="separator1" type="separator"/>
+        	<Field type="checkbox" id="triggerLowBatteryReport" default="true">
+        		<Label>Low battery report:</Label>
+        	</Field>
+        	<Field type="label" id="emptylabel1">
+        		<Label> </Label>
+        	</Field>
+        	<Field type="checkbox" id="triggerBatteryLevel" default="true">
+        		<Label>Battery level:</Label>
+			</Field>
+			<Field type="textfield" id="batteryLevel" defaultValue="10" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+				<Label>Trigger level (0-100%):</Label>
+			</Field>
+			<Field type="menu" id="batteryLevelResetOn" defaultValue="levelAbove" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+				<Label>Reset:</Label>
+				<List>
+					<Option value="levelAbove">Battery level above value</Option>
+					<Option value="manual">Manual reset</Option>
+					<Option value="always">Always trigger</Option>
+				</List>
+			</Field>
+			<Field type="textfield" id="batteryLevelResetLevel" defaultValue="80"  visibleBindingId="batteryLevelResetOn" visibleBindingValue="levelAbove" alwaysUseInDialogHeightCalc="true">
+				<Label>Level to reset on (%):</Label>
+			</Field>
+			<Field type="label" id="batteryLevelLabel" alignWithControl="true" visibleBindingId="batteryLevelResetOn" visibleBindingValue="levelAbove" alwaysUseInDialogHeightCalc="true">
+				<Label>To avoid having triggers every time the device reports battery level, you can choose how to reset the trigger for each device, meaning it will trigger again. Can be manually reset via plugin menu</Label>
+			</Field>
+        </ConfigUI>
+    </Event>
+
 </Events>

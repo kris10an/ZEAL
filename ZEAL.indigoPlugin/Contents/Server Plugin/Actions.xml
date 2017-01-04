@@ -1,8 +1,28 @@
 <?xml version="1.0"?>
 <Actions>
     <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
-    <Action id="testAction">
-        <Name>Test action</Name>
-        <CallbackMethod>testAction</CallbackMethod>
-    </Action>
+	<Action id="resetTriggerBatteryLevel">
+		<Name>Reset triggering on battery level</Name>
+		<CallbackMethod>resetTriggerBatteryLevel</CallbackMethod>
+		<ConfigUI>
+			<Field id="trigger" type="menu">
+				<Label>Select trigger to reset:</Label>
+				<List class="indigo.triggers" filter="com.kris10an.indigoplugin.zeal.x80received" dynamicReload="true"/>
+				<!--CallbackMethod>x80receivedResetTriggerChanged</CallbackMethod-->
+			</Field>
+			<Field id="resetDevice" type="menu">
+				<Label>Select device to reset:</Label>
+				<List class="self" method="getUIList" filter="x80resetDeviceList" dynamicReload="true"/>
+			</Field>
+			<Field id="explanation" type="label">
+				<Label>
+Performing this will reset the battery level trigger for the selected device and trigger.
+
+For example if the trigger is set to trigger on battery level 10% and set to manual reset, the trigger will not trigger for this device until reset operation has been performed, for example when battery has been replaced.
+
+If trigger is set to automatically reset above certain battery level, this is normally not required
+				</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
 </Actions>

@@ -6,10 +6,9 @@
 	 back to the user you can post information into the Event Log.
 -->
 <MenuItems>
-	<!-- 
-	<MenuItem id="menu1">
-		<Name>Something</Name>
-		<CallbackMethod>somethingFunc</CallbackMethod>
+    <SupportURL>https://github.com/kris10an/ZEAL/wiki</SupportURL>
+	<MenuItem id="resetTriggerBatteryLevel">
+		<Name>Reset triggering on battery level...</Name>
+		<ConfigUI actionId="resetTriggerBatteryLevel"/>
 	</MenuItem>
-	-->
 </MenuItems>
