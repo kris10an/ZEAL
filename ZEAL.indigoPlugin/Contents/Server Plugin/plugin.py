@@ -9,7 +9,8 @@ import sys
 import logging
 import json, operator
 #import csv,codecs,cStringIO
-from csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
+from lib.csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
+from lib.strVarTime import prettyDate
 from collections import defaultdict
 
 # Note the "indigo" module is automatically imported and made available inside
@@ -119,7 +120,7 @@ class Plugin(indigo.PluginBase):
 		indigo.zwave.subscribeToIncoming()
 		if self.extensiveDebug: # no need to subscribe normally, may be useful for debugging
 			indigo.zwave.subscribeToOutgoing()
-		# FIX, don't know any command to unsubscribe from outgoing z-wave commands
+		# FIX, don't know if it's possible to unsubscribe from outgoing z-wave commands
 		
 	########################################
 	def shutdown(self):
@@ -162,11 +163,11 @@ class Plugin(indigo.PluginBase):
 	def runConcurrentThread(self):
 		try:
 			while True:
-				# FIX add re-initializing of nodeDevVamp
+				# FIX re-initializing of nodeDevVamp, don't initialize twice at startup
 				# FIX add re-load triggers periodically (??)
-				#self.getZwaveNodeDevMap()
-				#self.logger.debug(u'runConcurrentThread 20')
-				self.sleep(20)
+				self.getZwaveNodeDevMap()
+				self.logger.debug(u'runConcurrentThread')
+				self.sleep(3600)
 		except self.StopThread:
 			pass
 		# 		if self.errorState:
@@ -188,6 +189,11 @@ class Plugin(indigo.PluginBase):
 			byteListHexStr = convertListToHexStrList(byteList)
 			nodeId = cmd['nodeId']			# Can be None! Integer
 			endpoint = cmd['endpoint']		# Often will be None! Integer (??)
+			
+			dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
+			if dev: devName = dev.name
+			else: devName = u'node id ' + unicode(nodeId)
+			
 			# Notification report
 			if CC == u'0x71' and byteList[8] == 5:
 				if byteList[9] != 0: # Alarm command version 1
@@ -196,10 +202,6 @@ class Plugin(indigo.PluginBase):
 					self.logger.debug(u'Command:			%s' % (byteList[8]))
 					self.logger.debug(u'V1 Alarm Type:		%s' % (byteList[9]))
 					self.logger.debug(u'V1 Alarm Level:		%s' % (byteList[10]))
-					
-					dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
-					if dev: devName = dev.name
-					else: devName = u'node id ' + unicode(nodeId)
 					
 					self.logger.info(u'Received "%s" alarm report (v1), alarm type %d, alarm level %d' % (devName, byteList[9], byteList[10]))
 					# FIX trigger
@@ -221,10 +223,6 @@ class Plugin(indigo.PluginBase):
 					else:
 						eventParmStr = u''
 
-					dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
-					if dev: devName = dev.name
-					else: devName = u'node id ' + unicode(nodeId)
-					
 					self.logger.info(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
 					
 					for triggerId in self.triggerMap[nodeId][CC][u'byte13'][hexStr(byteList[13])][u'byte14'][hexStr(byteList[14])].get(u'triggers', list()):
@@ -237,8 +235,7 @@ class Plugin(indigo.PluginBase):
 				self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 				self.logger.debug(u'Command:			%s' % (byteList[8]))
 				self.logger.debug(u'Battery level:		%s' % (byteList[9]))
-				d = self.triggerMap[nodeId][CC].get(u'triggers', list())
-				self.logger.debug(unicode(d))
+				
 				for triggerId in self.triggerMap[nodeId][CC].get(u'triggers', list()):
 					# FIX, check conditions
 					trigger = indigo.triggers[triggerId]
@@ -249,19 +246,21 @@ class Plugin(indigo.PluginBase):
 						triggeredDeviceList = list()
 					
 					if byteList[9] == 255 and props[u'triggerLowBatteryReport']: # trigger on low battery report
-						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+						self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 						indigo.trigger.execute(trigger)
+						self.logger.warn(u'Received "%s" low battery report' % (devName, nodeId))
 					elif props[u'triggerBatteryLevel'] and byteList[9] <= int(props[u'batteryLevel']): # trigger on battery level
-						self.logger.debug(u'Received battery level below trigger threshold, node id %03d, battery level %d' % (nodeId, byteList[9]))
+						self.logger.debug(u'Received "%s" battery level below trigger threshold (%d), node id %03d, battery level %d' % (devName, int(props[u'batteryLevel']), nodeId, byteList[9]))
 						# Check if previously triggered for node, skip if previously triggered
 
 						if (nodeId and nodeId not in triggeredDeviceList) or props[u'batteryLevelResetOn'] == u'always':
-							self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+							self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 							indigo.trigger.execute(trigger)
 							if nodeId not in triggeredDeviceList:
 								triggeredDeviceList.append(nodeId)
 								props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
 								trigger.replacePluginPropsOnServer(props)
+							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d' % (devName, byteList[9]))
 							self.extDebug(u'localProps: %s' % unicode(props))
 							# FIX, double check if more logic needs to be added
 							
@@ -522,10 +521,10 @@ class Plugin(indigo.PluginBase):
 			myArray = [
 				(u"_blank",u" "),
 				(u"_createNew",u"Create new filter...")]
-		elif filter in [u'alarmTypesInclude', u'eventsInclude', u'eventsExclude']:
+		elif filter in [u'alarmTypesInclude', u'eventsInclude', u'eventsExclude', u'x80resetDeviceList']:
 			myArray = [
 				(u"all",u"All")]
-		elif filter in [u'alarmTypesExclude', u'x80resetDeviceList']:
+		elif filter in [u'alarmTypesExclude']:
 			myArray = list()
 			
 		tmpArray = list()
@@ -540,7 +539,7 @@ class Plugin(indigo.PluginBase):
 		
 		elif filter == u'alarmTypesInclude' or filter == u'alarmTypesExclude':
 			for cmdType, cmdTypeDict in self.zDefs[u'0x71'][u'types'].items():
-				tmpArray.append( (cmdType,safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
+				tmpArray.append( (cmdType,unicode(cmdType) + ' - ' + safeGet(cmdTypeDict, u'%s - Unspecified type' % unicode(cmdType), u'description')) ) 
 		
 		elif filter == u'eventsInclude' or filter == u'eventsExclude':
 			if filter == u'eventsInclude': typeKey = u'includeFilterType'
@@ -588,7 +587,7 @@ class Plugin(indigo.PluginBase):
 				
 			sortedDevArray = sorted ( devArray, key = operator.itemgetter(1))
 
-			myArray = sortedDevArray
+			myArray = myArray + sortedDevArray
 
 		
 		tmpArray.sort()
@@ -830,39 +829,45 @@ class Plugin(indigo.PluginBase):
 		
 		props = action.props
 		
+				
 		try:
 			trigger = indigo.triggers[int(props[u'trigger'])]
 		except:
 			self.logger.error(u'Could not get selected trigger from Indigo')
 			raise
 			return False
-		
-		try:
-			dev = indigo.devices[int(props['resetDevice'])]
-		except:
-			self.logger.error(u'Could not get selected device from Indigo')
-			raise
-			return False
-			
-		self.logger.info(u'Resetting battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
-		
+					
 		pluginProps = trigger.pluginProps
-		triggeredDeviceList = self.load(pluginProps.get(u'triggeredDeviceList', self.store(list())))
-		self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
 		
-		if int(dev.address) in triggeredDeviceList:
-			self.logger.info(u'Device node %03d found in list of triggered devices for selected trigger' % (int(dev.address)))
+		if u'all' in props.get(u'resetDevice', list()):
+			self.logger.debug(u'Resetting battery level trigger for all devices, trigger id %d' % (trigger.id))
 			try:
-				triggeredDeviceList = [d for d in triggeredDeviceList if d != int(dev.address)]
-				pluginProps[u'triggeredDeviceList'] = triggeredDeviceList
-				self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+				pluginProps[u'triggeredDeviceList'] = self.store(list())
 				trigger.replacePluginPropsOnServer(pluginProps)
-				self.logger.info(u'Reset device battery level trigger')
+				self.logger.info(u'Reset battery level trigger for all devices, trigger id %d' % (trigger.id))
 			except:
-				self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+				self.logger.error(u'Could not reset battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
 				raise
 		else:
-			self.logger.info(u'Device not found in list of triggered devices for selected trigger, not performing anything')		
+			
+			self.logger.info(u'Resetting battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
+
+			triggeredDeviceList = self.load(pluginProps.get(u'triggeredDeviceList', self.store(list())))
+			self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
+		
+			if int(dev.address) in triggeredDeviceList:
+				self.logger.info(u'Device node %03d found in list of triggered devices for selected trigger' % (int(dev.address)))
+				try:
+					triggeredDeviceList = [d for d in triggeredDeviceList if d != int(dev.address)]
+					pluginProps[u'triggeredDeviceList'] = triggeredDeviceList
+					self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+					trigger.replacePluginPropsOnServer(pluginProps)
+					self.logger.info(u'Reset device "%s" battery level trigger, trigger id %d' % (dev.name, trigger.id))
+				except:
+					self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+					raise
+			else:
+				self.logger.info(u'Device not found in list of triggered devices for selected trigger, not performing anything')		
 		
 		return True
 
@@ -912,12 +917,38 @@ class Plugin(indigo.PluginBase):
 			valuesDict[u'excludeFilterEvents'] = list()
 			valuesDict[u'selectedExcludeFilter'] = u'_blank'
 		
-			# FIX validation for device selection
+		if valuesDict[u'triggerFor'] == u'selected':
+			if len(valuesDict.get(u'devices', list())) == 0:
+				errorDict[u'devices'] = u'Please select at least one device'
+			
+		if typeId == u'x80received':
+			if (not valuesDict[u'triggerLowBatteryReport']) and (not valuesDict[u'triggerBatteryLevel']):
+				errorDict[u'triggerBatteryLevel'] = u'Please select at least one trigger method'
+				errorDict[u'triggerLowBatteryReport'] = u'Please select at least one trigger method'
+				
+			try:
+				triggerLevel = int(valuesDict[u'batteryLevel'])
+				if triggerLevel < 0 or triggerLevel > 100:
+					errorDict[u'batteryLevel'] = u'Please type a battery level between 0 and 100'
+					
+				if valuesDict[u'batteryLevelResetOn'] == u'levelAbove':
+					try:
+						resetLevel = int(valuesDict[u'batteryLevelResetLevel'])
+						if resetLevel <= triggerLevel:
+							errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level that is higher than the trigger level'
+						if resetLevel < 0 or resetLevel > 100:
+							errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level between 0 and 100'
+					except ValueError:
+						errorDict[u'batteryLevelResetLevel'] = u'Please type a valid battery level (0-100)'
+			except ValueError:
+				errorDict[u'batteryLevel'] = u'Please type a valid battery level (0-100)'
+			
 			# FIX validation for not saving filter
 		
-		# FIX validation for battery report
-		
-		return (True, valuesDict, errorDict)
+		if len(errorDict) > 0:
+			return (False, valuesDict, errorDict)
+		else:
+			return (True, valuesDict)
 		
 	def validateActionConfigUi(self, valuesDict=None, typeId='', deviceId=0):
 		self.extDebug(u'CALL validateActionConfigUi, valuesDict: %s' % unicode(valuesDict))
@@ -941,7 +972,9 @@ class Plugin(indigo.PluginBase):
 				return (False, valuesDict, errorDict)
 				
 			try:
-				if u'resetDevice' in valuesDict and len(valuesDict[u'resetDevice']) > 0:
+				if u'all' in valuesDict.get(u'resetDevice', list()):
+					return (True, valuesDict, errorDict)
+				elif u'resetDevice' in valuesDict and len(valuesDict[u'resetDevice']) > 0:
 					dev = indigo.devices[int(valuesDict[u'resetDevice'])]
 				else:
 					self.logger.warn(u'No device selected')
