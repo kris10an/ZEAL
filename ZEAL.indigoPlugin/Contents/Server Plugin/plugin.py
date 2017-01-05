@@ -223,12 +223,16 @@ class Plugin(indigo.PluginBase):
 					else:
 						eventParmStr = u''
 
-					self.logger.info(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
-					
+					triggered = False
 					for triggerId in self.triggerMap[nodeId][CC][u'byte13'][hexStr(byteList[13])][u'byte14'][hexStr(byteList[14])].get(u'triggers', list()):
 						trigger = indigo.triggers[triggerId]
 						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
 						indigo.trigger.execute(trigger)
+						triggered = True
+					
+					if triggered:
+						self.logger.info(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
+					
 			# Battery report
 			elif CC == u'0x80' and byteList[8] == 3: # Battery report
 				self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
@@ -244,11 +248,13 @@ class Plugin(indigo.PluginBase):
 						triggeredDeviceList = self.load(props.get(u'triggeredDeviceList', self.store(list())))
 					except TypeError:
 						triggeredDeviceList = list()
+					except:
+						raise
 					
 					if byteList[9] == 255 and props[u'triggerLowBatteryReport']: # trigger on low battery report
 						self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 						indigo.trigger.execute(trigger)
-						self.logger.warn(u'Received "%s" low battery report' % (devName, nodeId))
+						self.logger.warn(u'Received "%s" low battery report' % (devName))
 					elif props[u'triggerBatteryLevel'] and byteList[9] <= int(props[u'batteryLevel']): # trigger on battery level
 						self.logger.debug(u'Received "%s" battery level below trigger threshold (%d), node id %03d, battery level %d' % (devName, int(props[u'batteryLevel']), nodeId, byteList[9]))
 						# Check if previously triggered for node, skip if previously triggered
