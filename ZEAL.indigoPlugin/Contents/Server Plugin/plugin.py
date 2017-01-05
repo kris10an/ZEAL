@@ -839,13 +839,13 @@ class Plugin(indigo.PluginBase):
 		try:
 			trigger = indigo.triggers[int(props[u'trigger'])]
 		except:
-			self.logger.error(u'Could not get selected trigger from Indigo')
+			self.logger.error(u'Reset trigger battery level: Could not get selected trigger from Indigo')
 			raise
 			return False
 					
 		pluginProps = trigger.pluginProps
 		
-		if u'all' in props.get(u'resetDevice', list()):
+		if props.get(u'resetDevice', '') == u'all':
 			self.logger.debug(u'Resetting battery level trigger for all devices, trigger id %d' % (trigger.id))
 			try:
 				pluginProps[u'triggeredDeviceList'] = self.store(list())
@@ -855,6 +855,12 @@ class Plugin(indigo.PluginBase):
 				self.logger.error(u'Could not reset battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
 				raise
 		else:
+		
+			try:
+				dev = indigo.devices[int(props.get(u'resetDevice', ''))]
+			except:
+				self.logger.error(u'Reset trigger battery level: Could not get selected device from Indigo, trigger "%s", device id %s' % (unicode(trigger.name), unicode(props.get(u'resetDevice', ''))))
+				return False				
 			
 			self.logger.info(u'Resetting battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
 
