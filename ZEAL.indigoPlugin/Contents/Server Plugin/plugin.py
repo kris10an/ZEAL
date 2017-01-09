@@ -162,11 +162,12 @@ class Plugin(indigo.PluginBase):
 	# will log an error and attempt to call runConcurrentThread() again after several seconds.
 	def runConcurrentThread(self):
 		try:
+			counter = 0
 			while True:
-				# FIX re-initializing of nodeDevVamp, don't initialize twice at startup
-				# FIX add re-load triggers periodically (??)
-				self.getZwaveNodeDevMap()
+				if counter > 0:
+					self.getZwaveNodeDevMap()
 				self.logger.debug(u'runConcurrentThread')
+				counter += 1
 				self.sleep(3600)
 		except self.StopThread:
 			pass
@@ -183,6 +184,8 @@ class Plugin(indigo.PluginBase):
 		#self.logger.debug(byteListHexStr)
 		#self.logger.debug(type(endpoint))
 		#self.logger.debug(type(byteList[7]))
+		
+		# FIX, check if log entries are made prior to triggers, to be included in log
 		
 		if CC in self.zDefs:
 			byteListStr = convertListToHexStr(byteList)
@@ -256,7 +259,7 @@ class Plugin(indigo.PluginBase):
 						indigo.trigger.execute(trigger)
 						self.logger.warn(u'Received "%s" low battery report' % (devName))
 					elif props[u'triggerBatteryLevel'] and byteList[9] <= int(props[u'batteryLevel']): # trigger on battery level
-						self.logger.debug(u'Received "%s" battery level below trigger threshold (%d), node id %03d, battery level %d' % (devName, int(props[u'batteryLevel']), nodeId, byteList[9]))
+						self.logger.debug(u'Received "%s" battery level below trigger threshold (%d%%), node id %03d, battery level %d%%' % (devName, int(props[u'batteryLevel']), nodeId, byteList[9]))
 						# Check if previously triggered for node, skip if previously triggered
 
 						if (nodeId and nodeId not in triggeredDeviceList) or props[u'batteryLevelResetOn'] == u'always':
@@ -266,11 +269,12 @@ class Plugin(indigo.PluginBase):
 								triggeredDeviceList.append(nodeId)
 								props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
 								trigger.replacePluginPropsOnServer(props)
-							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d' % (devName, byteList[9]))
+							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d%%' % (devName, byteList[9]))
 							self.extDebug(u'localProps: %s' % unicode(props))
 							# FIX, double check if more logic needs to be added
 							
 					elif props[u'triggerBatteryLevel'] and props[u'batteryLevelResetOn'] == u'levelAbove' and byteList[9] >= int(props[u'batteryLevelResetLevel']) and (nodeId in triggeredDeviceList):
+						# FIX implement reset for low battery report and for onTime
 						# battery level above reset level, and configured to reset when battery level is above set point
 						#if u'triggeredDeviceList' not in props:
 						#	props[u'triggeredDeviceList'] = list()
@@ -284,7 +288,7 @@ class Plugin(indigo.PluginBase):
 						self.extDebug(u'localProps: %s' % unicode(props))
 						trigger.replacePluginPropsOnServer(props)
 						
-						self.logger.info(u'Battery level above reset threshold for node id %s, reset trigger id %s "%s" for node' % (unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))				
+						self.logger.info(u'Battery level (%d%%) above reset threshold (%d%%) for node id %s, reset trigger id %s "%s" for node' % (byteList[9], int(props[u'batteryLevelResetLevel']), unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))				
 							
 
 	def zwaveCommandSent(self, cmd):
@@ -834,7 +838,7 @@ class Plugin(indigo.PluginBase):
 		self.extDebug(u'action: %s' % unicode(action))
 		
 		props = action.props
-		
+		#FIX implement reset for low battery report
 				
 		try:
 			trigger = indigo.triggers[int(props[u'trigger'])]
@@ -956,6 +960,9 @@ class Plugin(indigo.PluginBase):
 				errorDict[u'batteryLevel'] = u'Please type a valid battery level (0-100)'
 			
 			# FIX validation for not saving filter
+			# FIX implement showAlertText:
+			# FIX implement for lowbattery reset
+			#errorDict['showAlertText'] = u'Test!'
 		
 		if len(errorDict) > 0:
 			return (False, valuesDict, errorDict)
