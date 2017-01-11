@@ -38,17 +38,6 @@ eventCC = {
 	
 zFolder = u'Z-Wave'
 
-# emptyTriggeredDeviceList = {
-# 	u'batteryLevel'				: {
-# 		u'lastTriggered'		: u'',
-# 		u'activeTrigger'		: False
-# 		},
-# 	u'lowBattery'				: {
-# 		u'lastTriggered'		: u'',
-# 		u'activeTrigger'		: False
-# 		}
-# 	}
-
 ########################################
 # Tiny function to convert a list of integers (bytes in this case) to a
 # hexidecimal string for pretty logging.
@@ -198,8 +187,6 @@ class Plugin(indigo.PluginBase):
 		#self.logger.debug(type(endpoint))
 		#self.logger.debug(type(byteList[7]))
 		
-		# FIX, check if log entries are made prior to triggers, to be included in log
-		
 		if CC in self.zDefs:
 			byteListStr = convertListToHexStr(byteList)
 			byteListHexStr = convertListToHexStrList(byteList)
@@ -251,6 +238,8 @@ class Plugin(indigo.PluginBase):
 			# Battery report
 			elif CC == u'0x80' and byteList[8] == 3: # Battery report
 			
+				# FIX, move triggerId loop inside if's, to avoid having duplicated log entries in case of multiple triggers
+			
 				battLevel = byteList[9]
 				
 				if battLevel == 255:
@@ -295,16 +284,16 @@ class Plugin(indigo.PluginBase):
 							self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 							indigo.trigger.execute(trigger)
 						
-						propsUpdate = u'update'
-						propsUpdateKeys = [u'lowBattery']
+							propsUpdate = u'update'
+							propsUpdateKeys = [u'lowBattery']
 						
 					# Battery level report
 					elif triggerType == u'batteryLevel' and props[u'triggerBatteryLevel']:
 					
 						# Battery level below trigger threshold
 						if battLevel <= int(props[u'batteryLevel']):
-							self.logger.debug(u'Received "%s" battery level below trigger threshold (%d%%), node id %03d, battery level %d%%' % (devName, int(props[u'batteryLevel']), nodeId, byteList[9]))
-							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d%%' % (devName, byteList[9]))
+							self.logger.debug(u'Received "%s" battery level below trigger threshold (%d%%), node id %03d, battery level %d%%' % (devName, int(props[u'batteryLevel']), nodeId, battLevel))
+							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d%%' % (devName, battLevel))
 							
 							# Check if previously triggered for node, skip if previously triggered
 							if (props[u'batteryLevelResetOn'] == u'always') or \
@@ -324,7 +313,7 @@ class Plugin(indigo.PluginBase):
 							elif props[u'batteryLevelResetOn'] == u'levelAbove' and \
 							 battLevel >= int(props[u'batteryLevelResetLevel']):
 							 
-								self.logger.info(u'Battery level (%d%%) above reset threshold (%d%%) for node id %s, reset trigger id %s "%s" for node' % (byteList[9], int(props[u'batteryLevelResetLevel']), unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))	
+								self.logger.info(u'Battery level (%d%%) above reset threshold (%d%%) for node id %s, reset trigger id %s "%s" for node' % (battLevel, int(props[u'batteryLevelResetLevel']), unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))	
 							 	
 							 	propsUpdate = u'reset'
 							 	propsUpdateKeys = [u'lowBattery', u'batteryLevel']
