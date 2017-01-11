@@ -12,7 +12,6 @@ import json, operator
 from lib.csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 from lib.strVarTime import prettyDate, strToTime, timeToStr
 from collections import defaultdict
-from copy import deepcopy
 
 # Note the "indigo" module is automatically imported and made available inside
 # our global name space by the host process.
@@ -84,6 +83,7 @@ def removeTriggerFromDict(d, triggerId):
 	return d
 
 
+# FIX, check json dumps for integer keys as that is not supported
 ################################################################################
 class Plugin(indigo.PluginBase):
 
@@ -257,7 +257,7 @@ class Plugin(indigo.PluginBase):
 					trigger = self.triggers[triggerId]
 					props = trigger.pluginProps
 					
-					updateProps = u'noUpdate'
+					propsUpdate = u'noUpdate'
 					
 					try:
 						triggeredDeviceList = self.load(props.get(u'triggeredDeviceList', self.store(dict())))
@@ -277,7 +277,9 @@ class Plugin(indigo.PluginBase):
 					if triggerType == u'lowBattery' and props[u'triggerLowBatteryReport']: 
 						self.logger.warn(u'Received "%s" low battery report' % (devName))
 						
-						if (props[u'batteryLevelResetOn'] == u'onTime' and
+						if (props[u'batteryLevelResetOn'] == u'always') or \
+						 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not safeGet(triggeredDeviceList, False, nodeId, triggerType)) or \
+						 (props[u'batteryLevelResetOn'] == u'onTime' and 
 						 timeDiff(strToTime(safeGet(triggeredDeviceList, timeToStr(), nodeId, triggerType)), u'now', u'seconds') >=
 						 (int(props[u'batteryLevelResetTime'])*60*60)):
 						
@@ -297,6 +299,7 @@ class Plugin(indigo.PluginBase):
 							
 							# Check if previously triggered for node, skip if previously triggered
 							if (props[u'batteryLevelResetOn'] == u'always') or \
+						 	 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not safeGet(triggeredDeviceList, False, nodeId, triggerType)) or \
 							 (props[u'batteryLevelResetOn'] == u'onTime' and
 							  timeDiff(strToTime(safeGet(triggeredDeviceList, timeToStr(), nodeId, triggerType)), u'now', u'seconds') >=
 							  (int(props[u'batteryLevelResetTime'])*60*60)):
@@ -339,9 +342,11 @@ class Plugin(indigo.PluginBase):
 						
 					# Check if trigger props has been changed and are to be updated on server
 					if propsUpdate == u'update':
+						self.extDebug(u'Updating last executed time for trigger, triggeredDeviceList before: %s' % (unicode(triggeredDeviceList)))
 						for pKey in propsUpdateKeys:
-							triggeredDeviceList[nodeId][pKey] = timeToStr()
+							triggeredDeviceList[int(nodeId)][pKey] = timeToStr()
 							self.logger.debug(u'Updated %s last executed time for trigger "%s" node id %d' % (pKey, trigger.name, nodeId))
+						self.extDebug(u'Updated last executed time for trigger, triggeredDeviceList after: %s' % (unicode(triggeredDeviceList)))
 						props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
 						trigger.replacePluginPropsOnServer(props)
 					elif propsUpdate == u'reset':
@@ -401,7 +406,7 @@ class Plugin(indigo.PluginBase):
 		# 0x71 Notification/alarm command class
 		
 		try:
-			x71file = zFolder + u'/' + self.zDefs[u'0x71'][u'file']
+			x71file = os.path.join(zFolder, self.zDefs[u'0x71'][u'file'])
 			self.logger.debug(u'Reading file %s' % (x71file))
 			with open(x71file,'r') as fin:
 				reader = unicodeReader(fin, dialect='excel', delimiter=';')
