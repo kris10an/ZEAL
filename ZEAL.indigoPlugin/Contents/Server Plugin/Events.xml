@@ -138,7 +138,7 @@ Trigger on</Label>
         	<Field type="checkbox" id="triggerLowBatteryReport" default="true">
         		<Label>Low battery report:</Label>
         	</Field>
-			<Field type="menu" id="lowBatteryResetOn" defaultValue="levelAbove" visibleBindingId="triggerLowBatteryReport" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+			<!--<Field type="menu" id="lowBatteryResetOn" defaultValue="levelAbove" visibleBindingId="triggerLowBatteryReport" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
 				<Label>Reset:</Label>
 				<List>
 					<Option value="levelAbove">Battery level above value</Option>
@@ -155,12 +155,8 @@ Trigger on</Label>
 			</Field>
 			<Field type="label" id="lowBatteryLabel" alignWithControl="true" visibleBindingId="lowBatteryResetOn" visibleBindingValue="levelAbove,onTime,manual" alwaysUseInDialogHeightCalc="true" fontSize="small" fontColor="darkgray">
 				<Label>To avoid having multiple triggers if the device reports low battery multiple times, you can choose how to reset the trigger for each device, meaning it will trigger again. Can be manually reset via plugin menu</Label>
-			</Field>
+			</Field>-->
         	<Field type="label" id="emptylabel1">
-        		<Label>
-        		</Label>
-        	</Field>
-        	<Field type="label" id="emptylabel2">
         		<Label>
         		</Label>
         	</Field>
@@ -170,10 +166,23 @@ Trigger on</Label>
 			<Field type="textfield" id="batteryLevel" defaultValue="10" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
 				<Label>Trigger level (0-100%):</Label>
 			</Field>
+        	<Field type="label" id="emptylabel2">
+        		<Label>
+        		</Label>
+        	</Field>
+        	<Field type="label" id="emptylabel3">
+        		<Label>
+        		</Label>
+        	</Field>
+        	<Field type="label" id="resetHeading" fontColor="blue" fontSize="large">
+        		<Label>Reset and re-enable trigger</Label>
+        	</Field>
+        	<Field type="separator" id="separatorReset"/>
 			<Field type="menu" id="batteryLevelResetOn" defaultValue="levelAbove" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
-				<Label>Reset:</Label>
+				<Label>When to reset
+and re-enable:</Label>
 				<List>
-					<Option value="levelAbove">Battery level above value</Option>
+					<Option value="levelAbove">Battery level becomes above value</Option>
 					<Option value="onTime">On time</Option>
 					<Option value="manual">Manual reset</Option>
 					<Option value="always">Always trigger</Option>
@@ -186,7 +195,7 @@ Trigger on</Label>
 				<Label>Hours to reset after:</Label>
 			</Field>
 			<Field type="label" id="batteryLevelLabel" alignWithControl="true" visibleBindingId="batteryLevelResetOn" visibleBindingValue="levelAbove,onTime,manual" alwaysUseInDialogHeightCalc="true" fontSize="small" fontColor="darkgray">
-				<Label>To avoid having triggers every time the device reports battery level, you can choose how to reset the trigger for each device, meaning it will trigger again. Can be manually reset via plugin menu</Label>
+				<Label>To avoid having triggers every time the device reports battery level under trigger level or reports low battery multiple times, you can choose how to reset the trigger for each device, meaning it will trigger again. Can also  be manually reset via plugin menu</Label>
 			</Field>
         </ConfigUI>
     </Event>
