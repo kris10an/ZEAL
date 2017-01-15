@@ -10,7 +10,7 @@ import logging
 import json, operator
 #import csv,codecs,cStringIO
 from lib.csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
-from lib.strVarTime import prettyDate, strToTime, timeToStr
+from lib.strVarTime import prettyDate, strToTime, timeToStr, timeDiff
 from collections import defaultdict
 
 # Note the "indigo" module is automatically imported and made available inside
@@ -36,6 +36,8 @@ eventCC = {
 	}
 	
 zFolder = u'Z-Wave'
+
+variableEnablePrefs = [u'triggeringNodeId', u'triggeringDeviceId', u'triggeringDeviceName', u'triggeringEventText']
 
 ########################################
 # Tiny function to convert a list of integers (bytes in this case) to a
@@ -241,17 +243,23 @@ class Plugin(indigo.PluginBase):
 				# FIX, move triggerId loop inside if's, to avoid having duplicated log entries in case of multiple triggers
 			
 				battLevel = byteList[9]
-				
-				if battLevel == 255:
-					triggerType = u'lowBattery'
-				else:
-					triggerType = u'batteryLevel'
+				nodeIdStr = unicode(nodeId) # Need to use string as key, json doesn't support integers
 			
 				self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
 				self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
 				self.logger.debug(u'Command:			%s' % (byteList[8]))
 				self.logger.debug(u'Battery level:		%s' % (battLevel))
 				
+				# Low battery report				
+				if battLevel == 255:
+					triggerType = u'lowBattery'
+					triggeredNodesKey = u'lowBatteryTriggeredNodes'
+					
+				# Battery level report
+				else:
+					triggerType = u'batteryLevel'
+					triggeredNodesKey = u'batteryLevelTriggeredNodes'
+					
 				for triggerId in self.triggerMap[nodeId][CC].get(u'triggers', list()):
 					
 					trigger = self.triggers[triggerId]
@@ -260,34 +268,36 @@ class Plugin(indigo.PluginBase):
 					propsUpdate = u'noUpdate'
 					
 					try:
-						triggeredDeviceList = self.load(props.get(u'triggeredDeviceList', self.store(dict())))
+						triggeredNodesDict = self.load(props.get(triggeredNodesKey, self.store(dict())))
 						# Some older triggers (older plugin versions) may be of list type, change to dict. FIX, may be removed after a while
-						if isinstance(triggeredDeviceList, list):
-							self.logger.debug(u'Changed triggeredDeviceList to dictionary')
-							triggeredDeviceList = dict()
+						# REMOVED, as using differetd keys, 2017-01-15
+						# 						if isinstance(triggeredDeviceList, list):
+						# 							self.logger.debug(u'Changed triggeredDeviceList to dictionary')
+						# 							triggeredDeviceList = dict()
 					except TypeError:
-						triggeredDeviceList = dict()
+						triggeredNodesDict = dict()
 					except:
 						raise
 						
-					if nodeId not in triggeredDeviceList:
-						triggeredDeviceList[nodeId] = dict()
-					
+					# FIX, consider adding logging based on why event did not trigger
+
 					# trigger on low battery report
 					if triggerType == u'lowBattery' and props[u'triggerLowBatteryReport']: 
 						self.logger.warn(u'Received "%s" low battery report' % (devName))
 						
 						if (props[u'batteryLevelResetOn'] == u'always') or \
-						 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not safeGet(triggeredDeviceList, False, nodeId, triggerType)) or \
+						 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not nodeIdStr in triggeredNodesDict) or \
 						 (props[u'batteryLevelResetOn'] == u'onTime' and 
-						 timeDiff(strToTime(safeGet(triggeredDeviceList, timeToStr(), nodeId, triggerType)), u'now', u'seconds') >=
+						 timeDiff(strToTime(safeGet(triggeredNodesDict, timeToStr(), nodeIdStr)), u'now', u'seconds') >=
 						 (int(props[u'batteryLevelResetTime'])*60*60)):
 						
 							self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 							indigo.trigger.execute(trigger)
 						
 							propsUpdate = u'update'
-							propsUpdateKeys = [u'lowBattery']
+							#propsUpdateKeys = [u'lowBattery']
+						else:
+							self.logger.debug(u'Low battery report, not matched trigger conditions')
 						
 					# Battery level report
 					elif triggerType == u'batteryLevel' and props[u'triggerBatteryLevel']:
@@ -299,9 +309,9 @@ class Plugin(indigo.PluginBase):
 							
 							# Check if previously triggered for node, skip if previously triggered
 							if (props[u'batteryLevelResetOn'] == u'always') or \
-						 	 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not safeGet(triggeredDeviceList, False, nodeId, triggerType)) or \
+						 	 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not nodeIdStr in triggeredNodesDict) or \
 							 (props[u'batteryLevelResetOn'] == u'onTime' and
-							  timeDiff(strToTime(safeGet(triggeredDeviceList, timeToStr(), nodeId, triggerType)), u'now', u'seconds') >=
+							  timeDiff(strToTime(safeGet(triggeredNodesDict, timeToStr(), nodeIdStr)), u'now', u'seconds') >=
 							  (int(props[u'batteryLevelResetTime'])*60*60)):
 							
 								self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
@@ -310,7 +320,7 @@ class Plugin(indigo.PluginBase):
 								self.extDebug(u'localProps: %s' % unicode(props))
 								
 								propsUpdate = u'update'
-								propsUpdateKeys = [u'batteryLevel']
+								#propsUpdateKeys = [u'batteryLevel']
 								
 							# Battery level above reset level and configured to reset on level
 							elif props[u'batteryLevelResetOn'] == u'levelAbove' and \
@@ -320,6 +330,9 @@ class Plugin(indigo.PluginBase):
 							 	
 							 	propsUpdate = u'reset'
 							 	propsUpdateKeys = [u'lowBattery', u'batteryLevel']
+							 	
+							else:
+								self.logger.debug(u'Battery level report, not matched trigger conditions')
 							 	
 							# 					
 							# 					# battery level above value to reset and re-anable triggering
@@ -342,22 +355,31 @@ class Plugin(indigo.PluginBase):
 						
 					# Check if trigger props has been changed and are to be updated on server
 					if propsUpdate == u'update':
-						self.extDebug(u'Updating last executed time for trigger, triggeredDeviceList before: %s' % (unicode(triggeredDeviceList)))
-						for pKey in propsUpdateKeys:
-							triggeredDeviceList[int(nodeId)][pKey] = timeToStr()
-							self.logger.debug(u'Updated %s last executed time for trigger "%s" node id %d' % (pKey, trigger.name, nodeId))
-						self.extDebug(u'Updated last executed time for trigger, triggeredDeviceList after: %s' % (unicode(triggeredDeviceList)))
-						props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
-						trigger.replacePluginPropsOnServer(props)
+						#self.extDebug(u'Updating last executed time for trigger, triggeredNodesDict before: %s' % (unicode(triggeredNodesDict)))
+						#for pKey in propsUpdateKeys:
+						# 						tmpDict = props.get(pKey + u'TriggeredNodes', dict())
+						# 						tmpDict[nodeIdStr] = timeToStr()
+						# 						props[pKey + u'TriggeredNodes'] = self.store(tmpDict)
+						try:
+							triggeredNodesDict[nodeIdStr] = timeToStr()
+							props[triggeredNodesKey] = self.store(triggeredNodesDict)
+							trigger.replacePluginPropsOnServer(props)
+							self.logger.debug(u'Updated battery level last executed time for trigger "%s" node id %d' % (trigger.name, nodeId))
+						except:
+							self.logger.error(u'Could not update battery level last executed time for trigger "%s" node id %d' % (trigger.name, nodeId))
+							raise
+						#self.extDebug(u'Updated last executed time for trigger, triggeredDeviceList after: %s' % (unicode(triggeredNodesDict)))
 					elif propsUpdate == u'reset':
 						for pKey in propsUpdateKeys:
-							if pKey in triggeredDeviceList[nodeId]:
+							tmpDict = props.get(pKey + u'TriggeredNodes', dict())
+							if nodeIdStr in tmpDict:
 								try:
-									del triggeredDeviceList[nodeId][pKey]
+									del tmpDict[nodeIdStr]
 									self.logger.debug(u'Reset %s trigger for node id %d, trigger "%s"' % (pKey, nodeId, trigger.name))
 								except:
 									self.logger.error(u'Could not reset %s trigger for node id %d, trigger "%s"' % (pKey, nodeId, trigger.name))
-						props[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
+									raise
+							props[pKey + u'TriggeredNodes'] = self.store(tmpDict)
 						trigger.replacePluginPropsOnServer(props)
 							
 							
@@ -923,7 +945,6 @@ class Plugin(indigo.PluginBase):
 			trigger = indigo.triggers[int(props[u'trigger'])]
 		except:
 			self.logger.error(u'Reset trigger battery level: Could not get selected trigger from Indigo')
-			raise
 			return False
 					
 		pluginProps = trigger.pluginProps
@@ -931,11 +952,12 @@ class Plugin(indigo.PluginBase):
 		if props.get(u'resetDevice', '') == u'all':
 			self.logger.debug(u'Resetting battery level trigger for all devices, trigger id %d' % (trigger.id))
 			try:
-				pluginProps[u'triggeredDeviceList'] = self.store(dict())
+				pluginProps[u'lowBatteryTriggeredNodes'] = self.store(dict())
+				pluginProps[u'batteryLevelTriggeredNodes'] = self.store(dict())
 				trigger.replacePluginPropsOnServer(pluginProps)
-				self.logger.info(u'Reset battery level trigger for all devices, trigger id %d' % (trigger.id))
+				self.logger.info(u'Reset low battery and battery level trigger for all devices, trigger id %d' % (trigger.id))
 			except:
-				self.logger.error(u'Could not reset battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
+				self.logger.error(u'Could not reset low battery and battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
 				raise
 		else:
 		
@@ -945,24 +967,46 @@ class Plugin(indigo.PluginBase):
 				self.logger.error(u'Reset trigger battery level: Could not get selected device from Indigo, trigger "%s", device id %s' % (unicode(trigger.name), unicode(props.get(u'resetDevice', ''))))
 				return False				
 			
-			self.logger.info(u'Resetting battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
+			self.logger.info(u'Resetting low battery and battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
 
-			triggeredDeviceList = self.load(pluginProps.get(u'triggeredDeviceList', self.store(dict())))
-			self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
+			lowBatteryTriggeredNodes = self.load(pluginProps.get(u'lowBatteryTriggeredNodes', self.store(dict())))
+			batteryLevelTriggeredNodes = self.load(pluginProps.get(u'batteryLevelTriggeredNodes', self.store(dict())))
+			replacePluginProps = False
+			#self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
 		
-			if int(dev.address) in triggeredDeviceList:
-				self.logger.info(u'Device node %03d found in list of triggered devices for selected trigger' % (int(dev.address)))
+			if unicode(dev.address) in lowBatteryTriggeredNodes:
+				self.logger.info(u'Device node %03d found in list of triggered devices on low battery for selected trigger' % (int(dev.address)))
 				try:
-					del triggeredDeviceList[int(dev.address)]
-					pluginProps[u'triggeredDeviceList'] = self.store(triggeredDeviceList)
-					self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
-					trigger.replacePluginPropsOnServer(pluginProps)
+					del lowBatteryTriggeredNodes[unicode(dev.address)]
+					pluginProps[u'lowBatteryTriggeredNodes'] = self.store(lowBatteryTriggeredNodes)
+					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+					#trigger.replacePluginPropsOnServer(pluginProps)
+					self.logger.info(u'Reset device "%s" low battery  trigger, trigger id %d' % (dev.name, trigger.id))
+					replacePluginProps = True
+				except:
+					self.logger.error(u'Could not reset low battery trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+					raise
+			else:
+				self.logger.info(u'Device not found in list of devices triggered on low battery for selected trigger, not performing anything')	
+				
+			if unicode(dev.address) in batteryLevelTriggeredNodes:
+				self.logger.info(u'Device node %03d found in list of triggered devices on battery level for selected trigger' % (int(dev.address)))
+				try:
+					del batteryLevelTriggeredNodes[unicode(dev.address)]
+					pluginProps[u'batteryLevelTriggeredNodes'] = self.store(batteryLevelTriggeredNodes)
+					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+					#trigger.replacePluginPropsOnServer(pluginProps)
 					self.logger.info(u'Reset device "%s" battery level trigger, trigger id %d' % (dev.name, trigger.id))
+					replacePluginProps = True
 				except:
 					self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
 					raise
 			else:
-				self.logger.info(u'Device not found in list of triggered devices for selected trigger, not performing anything')		
+				self.logger.info(u'Device not found in list of devices triggered on battery level for selected trigger, not performing anything')	
+				
+			if replacePluginProps:
+				trigger.replacePluginPropsOnServer(pluginProps)
+				
 		
 		return True
 
@@ -1040,10 +1084,10 @@ class Plugin(indigo.PluginBase):
 			
 			# FIX validation for not saving filter
 			# FIX implement showAlertText:
-			# FIX implement for lowbattery reset
 			#errorDict['showAlertText'] = u'Test!'
 		
 		if len(errorDict) > 0:
+			errorDict[u'showAlertText'] = u'\n'.join(errorDict)
 			return (False, valuesDict, errorDict)
 		else:
 			return (True, valuesDict)

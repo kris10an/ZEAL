@@ -12,4 +12,63 @@
 	<Field type="checkbox" id="extensiveDebug" defaultValue="False">
 		<Label>Extensive debug log</Label>
 	</Field>
+	
+	<!-- VARIABLES -->
+	
+	<Field type="label" id="emptylabel1">
+		<Label>
+		</Label>
+	</Field>
+	<Field type="label" id="variableHeading" fontColor="blue" fontSize="large">
+		<Label>Store trigger information to variables:</Label>
+	</Field>
+	<Field type="separator" id="separatorReset"/>
+
+	<Field type="checkbox" id="triggeringNodeId" defaultValue="false">
+		<Label>Triggering node id:</Label>
+	</Field>
+	<Field type="menu" id="triggeringNodeIdVariable" visibleBindingId="triggeringNodeId" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+		<List class="indigo.variables" filter="indigo.readWrite"/>
+		<Label>...to variable:</Label>
+	</Field>
+	<Field type="label" id="emptylabel2" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>
+		</Label>
+	</Field>
+	
+	<Field type="checkbox" id="triggeringDeviceId" defaultValue="false">
+		<Label>Triggering device id:</Label>
+	</Field>
+	<Field type="menu" id="triggeringDeviceIdVariable" visibleBindingId="triggeringDeviceId" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+		<List class="indigo.variables" filter="indigo.readWrite"/>
+		<Label>...to variable:</Label>
+	</Field>
+	<Field type="label" id="emptylabel3" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>
+		</Label>
+	</Field>
+	
+	<Field type="checkbox" id="triggeringDeviceName" defaultValue="false">
+		<Label>Triggering device name:</Label>
+	</Field>
+	<Field type="menu" id="triggeringDeviceNameVariable" visibleBindingId="triggeringDeviceName" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+		<List class="indigo.variables" filter="indigo.readWrite"/>
+		<Label>...to variable:</Label>
+	</Field>
+	<Field type="label" id="emptylabel4" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>
+		</Label>
+	</Field>
+	
+	<Field type="checkbox" id="triggeringEventText" defaultValue="false">
+		<Label>Event text/log output:</Label>
+	</Field>
+	<Field type="menu" id="triggeringEventTextVariable" visibleBindingId="triggeringEventText" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+		<List class="indigo.variables" filter="indigo.readWrite"/>
+		<Label>...to variable:</Label>
+	</Field>
+	<Field type="label" id="emptylabel5" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>
+		</Label>
+	</Field>
 </PluginConfig>
