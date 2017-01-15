@@ -252,7 +252,7 @@ class Plugin(indigo.PluginBase):
 
 					triggered = False
 					for triggerId in self.triggerMap[nodeId][CC][u'byte13'][hexStr(byteList[13])][u'byte14'][hexStr(byteList[14])].get(u'triggers', list()):
-						trigger = indigo.triggers[triggerId]
+						trigger = self.triggers[triggerId]
 						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
 						if not triggered:
 							eventStr.append(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
@@ -440,14 +440,70 @@ class Plugin(indigo.PluginBase):
 		cmdSuccess = cmd['cmdSuccess']	# True if an ACK was received (or no ACK expected), false if NAK.
 		nodeId = cmd['nodeId']			# Can be None!
 		endpoint = cmd['endpoint']		# Often will be None!
+		updateVariables = False
+		triggered = False
+		debugStr = list()
+		eventStr = list()
+		
+		# get device, only if we need it later
+		if not cmdSuccess or timeDelta >= 100:
+			dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
+			if dev:
+				devName = dev.name
+				devId = dev.id
+			else:
+				devName = u'node id ' + unicode(nodeId)
+				devId = 0
 
 		if cmdSuccess:
 			if nodeId:
-				self.debugLog(u"sent: %s (node %03d ACK after %d milliseconds)" % (byteListStr, nodeId, timeDelta))
+				self.extDebug(u"sent: %s (node %03d ACK after %d milliseconds)" % (byteListStr, nodeId, timeDelta))
+				
+				# Check triggers, only if timeDelta larger than 100 to make load as small as possble
+				if timeDelta >= 100:
+					for triggerId in self.triggerMap[nodeId][u'zOut'].get(u'triggers', list()):
+						trigger = self.triggers[triggerId]
+						props = trigger.pluginProps
+						if props.get(u'triggerSlowAck', False) and int(props.get(u'ackTime', 0)) <= timeDelta:
+							self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+							if not triggered:
+								eventStr.append(u'"%s" slow ACK time (%d ms) on sent z-wave command: %s' % (devName, timeDelta, byteListStr))
+								self.logger.warn(eventStr[-1])
+							indigo.trigger.execute(trigger)
+							triggered = True
+							updateVariables = True
 			else:
-				self.debugLog(u"sent: %s (ACK after %d milliseconds)" % (byteListStr, timeDelta))
+				self.extDebug(u"sent: %s (ACK after %d milliseconds)" % (byteListStr, timeDelta))
 		else:
-			self.debugLog(u"sent: %s (failed)" % (byteListStr))
+			self.extDebug(u"sent: %s (failed)" % (byteListStr))
+			if nodeId:
+				for triggerId in self.triggerMap[nodeId][u'zOut'].get(u'triggers', list()):
+					trigger = self.triggers[triggerId]
+					props = trigger.pluginProps
+					if props.get(u'triggerNoAck', False):
+						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
+						if not triggered:
+							eventStr.append(u'"%s" no ACK on sent z-wave command: %s' % (devName, byteListStr))
+							self.logger.warn(eventStr[-1])
+						indigo.trigger.execute(trigger)
+						triggered = True
+						updateVariables = True
+						
+		# Update variables, set in plugin prefs
+		if updateVariables:
+
+			self.logger.debug(u'Updating variables for triggered event')
+			for varPref, varVal in zip(variableEnablePrefs, [nodeId, devId, devName, u'\n'.join(eventStr)]):
+				if self.pluginPrefs.get(varPref, False):
+					try:
+						var = indigo.variables[int(self.pluginPrefs.get(varPref + u'Variable', 0))]
+						self.extDebug(u'Updated variable "%s"' % (var.name))
+					except:
+						self.logger.error(u'Could not get indigo variable to store trigger information, %s' % varPref)
+						continue
+						
+					indigo.variable.updateValue(var, value=unicode(varVal))
+				
 
 	########################################
 	def triggerStartProcessing(self, trigger):
