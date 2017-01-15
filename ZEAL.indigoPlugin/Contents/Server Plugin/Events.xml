@@ -199,5 +199,44 @@ and re-enable:</Label>
 			</Field>
         </ConfigUI>
     </Event>
+    
+    <!-- Z-Wave No ack or slow response -->
+    
+    <Event id="zOut">
+        <Name>Slow or no ack on sent Z-wave command</Name>
+        <ConfigUI>
+        	<Field type="menu" id="triggerFor" defaultValue="all">
+        		<Label>Trigger for:</Label>
+        		<List>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="all">All Z-wave devices</Option>
+        		</List>
+        	</Field>
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        		<Label>Select devices:</Label>
+        		<List class="indigo.devices" filter="indigo.zwave"/>
+        	</Field>
+        	
+        	<Field type="label" id="introInclude" fontColor="blue">
+        		<Label>
+Trigger on</Label>
+        	</Field>
+        	<Field id="separator1" type="separator"/>
+        	<Field type="checkbox" id="triggerNoAck" default="true">
+        		<Label>No ack from device:</Label>
+        	</Field>
+        	<Field type="label" id="emptylabel1">
+        		<Label>
+        		</Label>
+        	</Field>
+        	<Field type="checkbox" id="triggerSlowAck" default="true">
+        		<Label>Slow response:</Label>
+			</Field>
+			<Field type="textfield" id="ackTime" defaultValue="300" visibleBindingId="triggerSlowAck" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+				<Label>Trigger response time (ms):</Label>
+			</Field>
+        </ConfigUI>
+    </Event>
+
 
 </Events>

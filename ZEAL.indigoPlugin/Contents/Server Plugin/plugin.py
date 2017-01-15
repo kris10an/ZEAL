@@ -26,13 +26,20 @@ zDefs = {
 		},
 	u'0x80'						: {
 		u'description'			: u'Battery command class'
+		},
+	u'noAck'					: {
+		u'description'			: u'No ack from Z-wave device'
+		},
+	u'slowAck'					: {
+		u'description'			: u'Slow ack from Z-wave device'
 		}
 	}
 
 # Events to command class
 eventCC = {
 	u'x71received'				: u'0x71',
-	u'x80received'				: u'0x80'
+	u'x80received'				: u'0x80',
+	u'zOut'						: u'zOut'
 	}
 	
 zFolder = u'Z-Wave'
@@ -99,17 +106,9 @@ class Plugin(indigo.PluginBase):
 		self.setUpdatePluginPrefs()
 		
 		self.zDefs = zDefs # Definition of Z-wave commands etc.
+		self.subscribedOutgoing = False # Set initial value to false, will be enabled if there are triggers
 		self.triggerMap = treeDD() # Map of node -> Z-wave commands -> trigger id
 		self.triggers = dict()
-		
-	########################################
-	def __del__(self):
-		indigo.PluginBase.__del__(self)
-				
-	########################################
-	def startup(self):
-		self.logger.debug(u"startup called")
-		
 		self.zNodes = {} # Map of zwave nodes to indigo devices
 		
 		# get Z-wave defs, types and events from file
@@ -121,10 +120,24 @@ class Plugin(indigo.PluginBase):
 		
 		# map z-wave nodes and commands to indigo triggers
 		
+	########################################
+	def __del__(self):
+		indigo.PluginBase.__del__(self)
+				
+	########################################
+	def startup(self):
+		self.logger.debug(u"startup called")
+
+		self.logger.debug(u'Subscribing to incoming Z-wave commands')
 		indigo.zwave.subscribeToIncoming()
-		if self.extensiveDebug: # no need to subscribe normally, may be useful for debugging
+		
+		if self.checkOutgoingTriggers():
+			self.logger.debug(u'Subscribing to outgoing Z-wave commands, as there are triggers for outgoing')
+			self.subscribedOutgoing = True
 			indigo.zwave.subscribeToOutgoing()
-		# FIX, don't know if it's possible to unsubscribe from outgoing z-wave commands
+		else:
+			self.logger.debug(u'Not subscribing to outgoing Z-wave commands, as there are no triggers for outgoing')
+		# FIX, don't know if it's possible to unsubscribe from outgoing z-wave commands if already subscribed
 		
 	########################################
 	def shutdown(self):
@@ -443,6 +456,13 @@ class Plugin(indigo.PluginBase):
 		self.getZwaveNodeTriggerMap(trigger, u'start')
 		
 		self.triggers[trigger.id] = trigger
+		
+		if not self.subscribedOutgoing and self.checkOutgoingTriggers():
+			self.logger.info(u'Subscribing to outgoing Z-wave commands, as there are now triggers for outgoing commands')
+			self.subscribedOutgoing = True
+			indigo.zwave.subscribeToOutgoing()
+			
+		# FIX, is there some way to unsubscribe if not needed?
 
 	########################################
 	def triggerStopProcessing(self, trigger):
@@ -455,6 +475,13 @@ class Plugin(indigo.PluginBase):
 				del self.triggers[trigger.id]
 			except:
 				self.logger.error(u'Could not remove trigger from plugin list of triggers')
+				
+		if trigger.pluginTypeId == u'zOut' and self.subscribedOutgoing and not self.checkOutgoingTriggers():
+			pass
+			# Passing for now; Don't think there's a way to know if the trigger is being restarted. Will cause false info in case of trigger restart. possibly use didComm.. method.
+			#self.logger.info(u'Already subscribed to outgoing Z-wave commands, as there are now no triggers for outgoing commands this could be stopped.\nAs there is no way to unsubscribe from commands, plugin could with benefit be restarted to reduce load')
+			#self.subscribedOutgoing = False
+			#indigo.zwave.unSubscribeOutgoing()
 
 	#####
 	# Read Z-wave commands and defs from supporting files
@@ -486,10 +513,11 @@ class Plugin(indigo.PluginBase):
 						self.logger.error(u'Duplicate notification event in file %s, misconfiguration' % (x71file))					
 						
 		except IOError:
-			self.logger.critical(u'Could not read file %s' % (x71file))
+			self.logger.critical(u'Could not read file %s, plugin will stop' % (x71file))
 			self.errorState = True	
+			raise
 		except:
-			self.logger.critical(u'Unexpected error while reading file %s' % (x71file))
+			self.logger.critical(u'Unexpected error while reading file %s, plugin will stop' % (x71file))
 			self.errorState = True
 			raise
 		else:
@@ -635,18 +663,119 @@ class Plugin(indigo.PluginBase):
 						pass
 						#self.extDebug(u'Skipping trigger type %s, id %s to dev address %s, battery report' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address)))
 						
-					
+				elif tType == u'zOut':
+					if props[u'triggerNoAck'] or props[u'triggerSlowAck']:
+						#self.extDebug(u'Mapping trigger type %s, id %s to dev address %s, battery report' % (unicode(trigger.pluginTypeId), unicode(trigger.id), unicode(dev.address)))
+						if u'triggers' not in m[addr][CC] or len(m[addr][CC][u'triggers']) == 0:
+							m[addr][CC][u'triggers'] = list()
+						if trigger.id not in m[addr][CC][u'triggers']:
+							m[addr][CC][u'triggers'].append(trigger.id)
+					else:
+						pass
 			
 		self.logger.debug(u'Finished mapping Z-wave nodes to trigger "%s"' % (trigger.name))			
 		#self.extDebug(u'triggerMap: %s' % (unicode(m)))
+
+	#####
+	# Check for outgoing triggers, if there is a need to subscribe to outgoing
+	#
+	def checkOutgoingTriggers(self):
+	
+		m = self.triggerMap
+		
+		for addr in m:
+			tList = safeGet(m, False, addr, u'zOut', u'triggers')
+			if tList:
+				self.logger.debug(u'Checking if there are triggers for outgoing z-wave commands: Found')
+				return True
+				
+		self.logger.debug(u'Checking if there are triggers for outgoing z-wave commands: Not found')
+		return False
+				
+				
 		
 	########################################
 	# Actions
 	########################################
 
-	def testAction(self, action, test1):
-		self.logger.debug(u"%s" % unicode(action))
-		self.logger.debug(u"%s" % unicode(test1))
+	def resetTriggerBatteryLevel(self, action):
+		self.extDebug(u'CALL resetTriggerBatteryLevel')
+		self.extDebug(u'action: %s' % unicode(action))
+		
+		props = action.props
+		#FIX implement reset for low battery report
+				
+		try:
+			trigger = indigo.triggers[int(props[u'trigger'])]
+		except:
+			self.logger.error(u'Reset trigger battery level: Could not get selected trigger from Indigo')
+			return False
+					
+		pluginProps = trigger.pluginProps
+		
+		if props.get(u'resetDevice', '') == u'all':
+			self.logger.debug(u'Resetting battery level trigger for all devices, trigger id %d' % (trigger.id))
+			try:
+				pluginProps[u'lowBatteryTriggeredNodes'] = self.store(dict())
+				pluginProps[u'batteryLevelTriggeredNodes'] = self.store(dict())
+				trigger.replacePluginPropsOnServer(pluginProps)
+				self.logger.info(u'Reset low battery and battery level trigger for all devices, trigger id %d' % (trigger.id))
+			except:
+				self.logger.error(u'Could not reset low battery and battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
+				raise
+		else:
+		
+			try:
+				dev = indigo.devices[int(props.get(u'resetDevice', ''))]
+			except:
+				self.logger.error(u'Reset trigger battery level: Could not get selected device from Indigo, trigger "%s", device id %s' % (unicode(trigger.name), unicode(props.get(u'resetDevice', ''))))
+				return False				
+			
+			self.logger.info(u'Resetting low battery and battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
+
+			lowBatteryTriggeredNodes = self.load(pluginProps.get(u'lowBatteryTriggeredNodes', self.store(dict())))
+			batteryLevelTriggeredNodes = self.load(pluginProps.get(u'batteryLevelTriggeredNodes', self.store(dict())))
+			replacePluginProps = False
+			#self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
+		
+			if unicode(dev.address) in lowBatteryTriggeredNodes:
+				self.logger.info(u'Device node %03d found in list of triggered devices on low battery for selected trigger' % (int(dev.address)))
+				try:
+					del lowBatteryTriggeredNodes[unicode(dev.address)]
+					pluginProps[u'lowBatteryTriggeredNodes'] = self.store(lowBatteryTriggeredNodes)
+					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+					#trigger.replacePluginPropsOnServer(pluginProps)
+					self.logger.info(u'Reset device "%s" low battery  trigger, trigger id %d' % (dev.name, trigger.id))
+					replacePluginProps = True
+				except:
+					self.logger.error(u'Could not reset low battery trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+					raise
+			else:
+				self.logger.info(u'Device not found in list of devices triggered on low battery for selected trigger, not performing anything')	
+				
+			if unicode(dev.address) in batteryLevelTriggeredNodes:
+				self.logger.info(u'Device node %03d found in list of triggered devices on battery level for selected trigger' % (int(dev.address)))
+				try:
+					del batteryLevelTriggeredNodes[unicode(dev.address)]
+					pluginProps[u'batteryLevelTriggeredNodes'] = self.store(batteryLevelTriggeredNodes)
+					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
+					#trigger.replacePluginPropsOnServer(pluginProps)
+					self.logger.info(u'Reset device "%s" battery level trigger, trigger id %d' % (dev.name, trigger.id))
+					replacePluginProps = True
+				except:
+					self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
+					raise
+			else:
+				self.logger.info(u'Device not found in list of devices triggered on battery level for selected trigger, not performing anything')	
+				
+			if replacePluginProps:
+				trigger.replacePluginPropsOnServer(pluginProps)
+				
+		
+		return True
+
+		
+
 
 	########################################
 	# UI List generators and callbackmethods
@@ -969,85 +1098,6 @@ class Plugin(indigo.PluginBase):
 		return valuesDict
 
 
-	def resetTriggerBatteryLevel(self, action):
-		self.extDebug(u'CALL resetTriggerBatteryLevel')
-		self.extDebug(u'action: %s' % unicode(action))
-		
-		props = action.props
-		#FIX implement reset for low battery report
-				
-		try:
-			trigger = indigo.triggers[int(props[u'trigger'])]
-		except:
-			self.logger.error(u'Reset trigger battery level: Could not get selected trigger from Indigo')
-			return False
-					
-		pluginProps = trigger.pluginProps
-		
-		if props.get(u'resetDevice', '') == u'all':
-			self.logger.debug(u'Resetting battery level trigger for all devices, trigger id %d' % (trigger.id))
-			try:
-				pluginProps[u'lowBatteryTriggeredNodes'] = self.store(dict())
-				pluginProps[u'batteryLevelTriggeredNodes'] = self.store(dict())
-				trigger.replacePluginPropsOnServer(pluginProps)
-				self.logger.info(u'Reset low battery and battery level trigger for all devices, trigger id %d' % (trigger.id))
-			except:
-				self.logger.error(u'Could not reset low battery and battery level trigger, trigger "%s", all devices' % (unicode(trigger.name)))
-				raise
-		else:
-		
-			try:
-				dev = indigo.devices[int(props.get(u'resetDevice', ''))]
-			except:
-				self.logger.error(u'Reset trigger battery level: Could not get selected device from Indigo, trigger "%s", device id %s' % (unicode(trigger.name), unicode(props.get(u'resetDevice', ''))))
-				return False				
-			
-			self.logger.info(u'Resetting low battery and battery level trigger for device "%s" on trigger "%s"' % (unicode(dev.name), unicode(trigger.name)))
-
-			lowBatteryTriggeredNodes = self.load(pluginProps.get(u'lowBatteryTriggeredNodes', self.store(dict())))
-			batteryLevelTriggeredNodes = self.load(pluginProps.get(u'batteryLevelTriggeredNodes', self.store(dict())))
-			replacePluginProps = False
-			#self.extDebug(u'triggeredDeviceList before: %s' % unicode(triggeredDeviceList))
-		
-			if unicode(dev.address) in lowBatteryTriggeredNodes:
-				self.logger.info(u'Device node %03d found in list of triggered devices on low battery for selected trigger' % (int(dev.address)))
-				try:
-					del lowBatteryTriggeredNodes[unicode(dev.address)]
-					pluginProps[u'lowBatteryTriggeredNodes'] = self.store(lowBatteryTriggeredNodes)
-					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
-					#trigger.replacePluginPropsOnServer(pluginProps)
-					self.logger.info(u'Reset device "%s" low battery  trigger, trigger id %d' % (dev.name, trigger.id))
-					replacePluginProps = True
-				except:
-					self.logger.error(u'Could not reset low battery trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
-					raise
-			else:
-				self.logger.info(u'Device not found in list of devices triggered on low battery for selected trigger, not performing anything')	
-				
-			if unicode(dev.address) in batteryLevelTriggeredNodes:
-				self.logger.info(u'Device node %03d found in list of triggered devices on battery level for selected trigger' % (int(dev.address)))
-				try:
-					del batteryLevelTriggeredNodes[unicode(dev.address)]
-					pluginProps[u'batteryLevelTriggeredNodes'] = self.store(batteryLevelTriggeredNodes)
-					#self.extDebug(u'triggeredDeviceList after: %s' % unicode(triggeredDeviceList))
-					#trigger.replacePluginPropsOnServer(pluginProps)
-					self.logger.info(u'Reset device "%s" battery level trigger, trigger id %d' % (dev.name, trigger.id))
-					replacePluginProps = True
-				except:
-					self.logger.error(u'Could not reset battery level trigger, trigger "%s", device "%s"' % (unicode(trigger.name), unicode(dev.name)))
-					raise
-			else:
-				self.logger.info(u'Device not found in list of devices triggered on battery level for selected trigger, not performing anything')	
-				
-			if replacePluginProps:
-				trigger.replacePluginPropsOnServer(pluginProps)
-				
-		
-		return True
-
-		
-
-
 	########################################
 	# UI VALIDATION
 	########################################	
@@ -1130,9 +1180,22 @@ class Plugin(indigo.PluginBase):
 						errorDict[u'batteryLevelResetTime'] = u'Please type a number of hours between 1 and 5000'
 				except ValueError:
 					errorDict[u'batteryLevelResetTime'] = u'Please type a valid battery level (1-5000)'
-			
+						
+		if typeId == u'zOut':
+			if (not valuesDict[u'triggerNoAck']) and (not valuesDict[u'triggerSlowAck']):
+				errorDict[u'triggerNoAck'] = u'Please select at least one trigger method'
+				errorDict[u'triggerSlowAck'] = u'Please select at least one trigger method'
+				
+			if valuesDict[u'triggerSlowAck']:
+				try:
+					triggerLevel = int(valuesDict[u'ackTime'])
+					if (triggerLevel < 100 or triggerLevel > 10000):
+						errorDict[u'ackTime'] = u'Please type a response time between 100 and 10000'
+				except ValueError:
+					errorDict[u'ackTime'] = u'Please type a valid integer response time (100-10000)'
+					
 			# FIX validation for not saving filter
-			# FIX implement showAlertText:
+			# FIX improve showAlertText:
 			#errorDict['showAlertText'] = u'Test!'
 		
 		if len(errorDict) > 0:
@@ -1189,10 +1252,7 @@ class Plugin(indigo.PluginBase):
 		self.extDebug(u'CALL closedPrefsConfigUi, userCancelled: %s' % unicode(userCancelled))
 		
 		self.setUpdatePluginPrefs(True)
-		
-		if self.extensiveDebug:
-			indigo.zwave.subscribeToOutgoing()
-	
+
 		# FIX DO VALIDATION
 		self.pluginConfigErrorState = False
 		
