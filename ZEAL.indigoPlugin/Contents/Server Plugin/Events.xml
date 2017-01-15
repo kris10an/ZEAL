@@ -178,7 +178,7 @@ Trigger on</Label>
         		<Label>Reset and re-enable trigger</Label>
         	</Field>
         	<Field type="separator" id="separatorReset"/>
-			<Field type="menu" id="batteryLevelResetOn" defaultValue="levelAbove" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+			<Field type="menu" id="batteryLevelResetOn" defaultValue="levelAbove" alwaysUseInDialogHeightCalc="true">
 				<Label>When to reset
 and re-enable:</Label>
 				<List>

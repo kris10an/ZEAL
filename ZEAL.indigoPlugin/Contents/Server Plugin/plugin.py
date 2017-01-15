@@ -189,15 +189,23 @@ class Plugin(indigo.PluginBase):
 		#self.logger.debug(type(endpoint))
 		#self.logger.debug(type(byteList[7]))
 		
+		eventStr = list()
+		debugStr = list()
+		
 		if CC in self.zDefs:
 			byteListStr = convertListToHexStr(byteList)
 			byteListHexStr = convertListToHexStrList(byteList)
 			nodeId = cmd['nodeId']			# Can be None! Integer
 			endpoint = cmd['endpoint']		# Often will be None! Integer (??)
+			updateVariables = False
 			
 			dev = safeGet(self.zNodes, False, unicode(nodeId), endpoint)
-			if dev: devName = dev.name
-			else: devName = u'node id ' + unicode(nodeId)
+			if dev:
+				devName = dev.name
+				devId = dev.id
+			else:
+				devName = u'node id ' + unicode(nodeId)
+				devId = 0
 			
 			# Notification report
 			if CC == u'0x71' and byteList[8] == 5:
@@ -208,7 +216,8 @@ class Plugin(indigo.PluginBase):
 					self.logger.debug(u'V1 Alarm Type:		%s' % (byteList[9]))
 					self.logger.debug(u'V1 Alarm Level:		%s' % (byteList[10]))
 					
-					self.logger.info(u'Received "%s" alarm report (v1), alarm type %d, alarm level %d' % (devName, byteList[9], byteList[10]))
+					eventStr.append(u'Received "%s" alarm report (v1), alarm type %d, alarm level %d' % (devName, byteList[9], byteList[10]))
+					self.logger.info(eventStr[-1])
 					# FIX trigger
 				else: # Notification command version 2-8
 					# FIX use descriptions from zDefs
@@ -233,9 +242,11 @@ class Plugin(indigo.PluginBase):
 						trigger = indigo.triggers[triggerId]
 						self.logger.debug(u'Triggering trigger id %s "%s"' % (unicode(trigger.id), unicode(trigger.name)))
 						if not triggered:
-							self.logger.info(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
+							eventStr.append(u'Received "%s" notification report "%s", type %d, event %d%s' % (devName, safeGet(self.zDefs, u'Unknown Event', CC, u'types', byteListHexStr[13], u'events', byteListHexStr[14], u'description'), byteList[13], byteList[14], eventParmStr))
+							self.logger.info(eventStr[-1])
 						indigo.trigger.execute(trigger)
 						triggered = True
+						updateVariables = True
 					
 			# Battery report
 			elif CC == u'0x80' and byteList[8] == 3: # Battery report
@@ -260,6 +271,7 @@ class Plugin(indigo.PluginBase):
 					triggerType = u'batteryLevel'
 					triggeredNodesKey = u'batteryLevelTriggeredNodes'
 					
+				logged = False
 				for triggerId in self.triggerMap[nodeId][CC].get(u'triggers', list()):
 					
 					trigger = self.triggers[triggerId]
@@ -283,18 +295,22 @@ class Plugin(indigo.PluginBase):
 
 					# trigger on low battery report
 					if triggerType == u'lowBattery' and props[u'triggerLowBatteryReport']: 
-						self.logger.warn(u'Received "%s" low battery report' % (devName))
+						if not logged:
+							eventStr.append(u'Received "%s" low battery report' % (devName))
+							self.logger.warn(eventStr[-1])
+							logged = True
 						
 						if (props[u'batteryLevelResetOn'] == u'always') or \
 						 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not nodeIdStr in triggeredNodesDict) or \
 						 (props[u'batteryLevelResetOn'] == u'onTime' and 
-						 timeDiff(strToTime(safeGet(triggeredNodesDict, timeToStr(), nodeIdStr)), u'now', u'seconds') >=
+						 timeDiff(strToTime(safeGet(triggeredNodesDict, u'1970-01-01 00:00:00', nodeIdStr)), u'now', u'seconds') >=
 						 (int(props[u'batteryLevelResetTime'])*60*60)):
 						
 							self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
 							indigo.trigger.execute(trigger)
 						
 							propsUpdate = u'update'
+							updateVariables = True
 							#propsUpdateKeys = [u'lowBattery']
 						else:
 							self.logger.debug(u'Low battery report, not matched trigger conditions')
@@ -305,13 +321,16 @@ class Plugin(indigo.PluginBase):
 						# Battery level below trigger threshold
 						if battLevel <= int(props[u'batteryLevel']):
 							self.logger.debug(u'Received "%s" battery level below trigger threshold (%d%%), node id %03d, battery level %d%%' % (devName, int(props[u'batteryLevel']), nodeId, battLevel))
-							self.logger.warn(u'Received "%s" battery level below trigger threshold, battery level %d%%' % (devName, battLevel))
+							if not logged:
+								eventStr.append(u'Received "%s" battery level below trigger threshold, battery level %d%%' % (devName, battLevel))
+								self.logger.warn(eventStr[-1])
+								logged = True
 							
 							# Check if previously triggered for node, skip if previously triggered
 							if (props[u'batteryLevelResetOn'] == u'always') or \
 						 	 (props[u'batteryLevelResetOn'] in [u'manual', u'levelAbove'] and not nodeIdStr in triggeredNodesDict) or \
 							 (props[u'batteryLevelResetOn'] == u'onTime' and
-							  timeDiff(strToTime(safeGet(triggeredNodesDict, timeToStr(), nodeIdStr)), u'now', u'seconds') >=
+							  timeDiff(strToTime(safeGet(triggeredNodesDict, u'1970-01-01 00:00:00', nodeIdStr)), u'now', u'seconds') >=
 							  (int(props[u'batteryLevelResetTime'])*60*60)):
 							
 								self.logger.debug(u'Triggering trigger id %s "%s", node id %03d, device "%s"' % (unicode(trigger.id), unicode(trigger.name), nodeId, devName))
@@ -320,13 +339,15 @@ class Plugin(indigo.PluginBase):
 								self.extDebug(u'localProps: %s' % unicode(props))
 								
 								propsUpdate = u'update'
+								updateVariables = True
 								#propsUpdateKeys = [u'batteryLevel']
 								
 							# Battery level above reset level and configured to reset on level
 							elif props[u'batteryLevelResetOn'] == u'levelAbove' and \
 							 battLevel >= int(props[u'batteryLevelResetLevel']):
 							 
-								self.logger.info(u'Battery level (%d%%) above reset threshold (%d%%) for node id %s, reset trigger id %s "%s" for node' % (battLevel, int(props[u'batteryLevelResetLevel']), unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))	
+							 	eventStr.append(u'Battery level (%d%%) above reset threshold (%d%%) for node id %s, reset trigger id %s "%s" for node' % (battLevel, int(props[u'batteryLevelResetLevel']), unicode(nodeId), unicode(trigger.id), unicode(trigger.name)))
+								self.logger.info(eventStr[-1])	
 							 	
 							 	propsUpdate = u'reset'
 							 	propsUpdateKeys = [u'lowBattery', u'batteryLevel']
@@ -381,7 +402,21 @@ class Plugin(indigo.PluginBase):
 									raise
 							props[pKey + u'TriggeredNodes'] = self.store(tmpDict)
 						trigger.replacePluginPropsOnServer(props)
+			
+			# Update variables, set in plugin prefs
+			if updateVariables:
+
+				self.logger.debug(u'Updating variables for triggered event')
+				for varPref, varVal in zip(variableEnablePrefs, [nodeId, devId, devName, u'\n'.join(eventStr)]):
+					if self.pluginPrefs.get(varPref, False):
+						try:
+							var = indigo.variables[int(self.pluginPrefs.get(varPref + u'Variable', 0))]
+							self.extDebug(u'Updated variable "%s"' % (var.name))
+						except:
+							self.logger.error(u'Could not get indigo variable to store trigger information, %s' % varPref)
+							continue
 							
+						indigo.variable.updateValue(var, value=unicode(varVal))
 							
 
 	def zwaveCommandSent(self, cmd):
@@ -1022,12 +1057,17 @@ class Plugin(indigo.PluginBase):
 		self.extDebug(u'CALL validatePrefsConfigUI, valuesDict: %s' % unicode(valuesDict))
 		
 		errorDict = indigo.Dict()
-		'''if len(valuesDict[u'varFolderName']) == 0:
-			errorDict[u'varFolderName'] = u'Please specify a name for the variable folder'
-			errorDict[u'showAlertText'] = u'Please specify a name for the variable folder'
-			
-		if not valuesDict[u'debugLog']:
-			valuesDict[u'extensiveDebug'] = False'''
+		
+		for varPref in variableEnablePrefs:
+			if valuesDict.get(varPref, False):
+				if len(valuesDict.get(varPref + u'Variable', u'')) == 0:
+					errorDict[varPref + u'Variable'] = u'Please select a variable'
+				else:
+					try:
+						var = indigo.variables[int(valuesDict.get(varPref + u'Variable'))]
+					except:
+						errorDict[varPref + u'Variable'] = u'Invalid variable selected'
+						
 			
 		if len(errorDict) > 0:
 			return (False, valuesDict, errorDict)
@@ -1065,29 +1105,38 @@ class Plugin(indigo.PluginBase):
 				errorDict[u'triggerBatteryLevel'] = u'Please select at least one trigger method'
 				errorDict[u'triggerLowBatteryReport'] = u'Please select at least one trigger method'
 				
-			try:
-				triggerLevel = int(valuesDict[u'batteryLevel'])
-				if triggerLevel < 0 or triggerLevel > 100:
-					errorDict[u'batteryLevel'] = u'Please type a battery level between 0 and 100'
+			if valuesDict[u'triggerBatteryLevel']:
+				try:
+					triggerLevel = int(valuesDict[u'batteryLevel'])
+					if (triggerLevel < 0 or triggerLevel > 100):
+						errorDict[u'batteryLevel'] = u'Please type a battery level between 0 and 100'
+				except ValueError:
+					errorDict[u'batteryLevel'] = u'Please type a valid battery level (0-100)'
 					
-				if valuesDict[u'batteryLevelResetOn'] == u'levelAbove':
-					try:
-						resetLevel = int(valuesDict[u'batteryLevelResetLevel'])
-						if resetLevel <= triggerLevel:
-							errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level that is higher than the trigger level'
-						if resetLevel < 0 or resetLevel > 100:
-							errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level between 0 and 100'
-					except ValueError:
-						errorDict[u'batteryLevelResetLevel'] = u'Please type a valid battery level (0-100)'
-			except ValueError:
-				errorDict[u'batteryLevel'] = u'Please type a valid battery level (0-100)'
+			if valuesDict[u'batteryLevelResetOn'] == u'levelAbove':
+				try:
+					resetLevel = int(valuesDict[u'batteryLevelResetLevel'])
+					if resetLevel <= triggerLevel:
+						errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level that is higher than the trigger level'
+					if resetLevel < 0 or resetLevel > 100:
+						errorDict[u'batteryLevelResetLevel'] = u'Please type a reset level between 0 and 100'
+				except ValueError:
+					errorDict[u'batteryLevelResetLevel'] = u'Please type a valid battery level (0-100)'
+					
+			if valuesDict[u'batteryLevelResetOn'] == u'onTime':
+				try:
+					numHours = int(valuesDict[u'batteryLevelResetTime'])
+					if numHours < 1 or numHours > 5000:
+						errorDict[u'batteryLevelResetTime'] = u'Please type a number of hours between 1 and 5000'
+				except ValueError:
+					errorDict[u'batteryLevelResetTime'] = u'Please type a valid battery level (1-5000)'
 			
 			# FIX validation for not saving filter
 			# FIX implement showAlertText:
 			#errorDict['showAlertText'] = u'Test!'
 		
 		if len(errorDict) > 0:
-			errorDict[u'showAlertText'] = u'\n'.join(errorDict)
+			errorDict[u'showAlertText'] = u'\n'.join([value for key, value in errorDict.items() if key != u'showAlertText'])
 			return (False, valuesDict, errorDict)
 		else:
 			return (True, valuesDict)
