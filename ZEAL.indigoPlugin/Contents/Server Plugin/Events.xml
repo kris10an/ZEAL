@@ -16,13 +16,15 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
         	<Field type="menu" id="triggerFor" defaultValue="all">
         		<Label>Trigger for:</Label>
         		<List>
-        			<Option value="selected">Selected devices</Option>
         			<Option value="all">All Z-wave devices</Option>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="excludeSelected">All, except selected Z-wave devices</Option>
         		</List>
         	</Field>
-        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected,excludeSelected" alwaysUseInDialogHeightCalc="true">
         		<Label>Select devices:</Label>
-        		<List class="indigo.devices" filter="indigo.zwave"/>
+        		<List class="self" method="getUIList" filter="zDeviceList"/>
+        		<!--List class="indigo.devices" filter="indigo.zwave"/-->
         	</Field>
         	
         	<!-- INCLUSION FILTERS -->
@@ -121,13 +123,14 @@ notification types:</Label>
         	<Field type="menu" id="triggerFor" defaultValue="all">
         		<Label>Trigger for:</Label>
         		<List>
-        			<Option value="selected">Selected devices</Option>
         			<Option value="all">All Z-wave devices</Option>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="excludeSelected">All, except selected Z-wave devices</Option>
         		</List>
         	</Field>
-        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected,excludeSelected" alwaysUseInDialogHeightCalc="true">
         		<Label>Select devices:</Label>
-        		<List class="indigo.devices" filter="indigo.zwave"/>
+        		<List class="self" method="getUIList" filter="zDeviceList"/>
         	</Field>
         	
         	<Field type="label" id="introInclude" fontColor="blue">
@@ -208,13 +211,14 @@ and re-enable:</Label>
         	<Field type="menu" id="triggerFor" defaultValue="all">
         		<Label>Trigger for:</Label>
         		<List>
-        			<Option value="selected">Selected devices</Option>
         			<Option value="all">All Z-wave devices</Option>
+        			<Option value="selected">Selected devices</Option>
+        			<Option value="excludeSelected">All, except selected Z-wave devices</Option>
         		</List>
         	</Field>
-        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        	<Field type="list" id="devices" rows="6" visibleBindingId="triggerFor" visibleBindingValue="selected,excludeSelected" alwaysUseInDialogHeightCalc="true">
         		<Label>Select devices:</Label>
-        		<List class="indigo.devices" filter="indigo.zwave"/>
+        		<List class="self" method="getUIList" filter="zDeviceList"/>
         	</Field>
         	
         	<Field type="label" id="introInclude" fontColor="blue">

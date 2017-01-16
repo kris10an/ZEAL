@@ -596,18 +596,20 @@ class Plugin(indigo.PluginBase):
 		
 		# add all endpoints to zNodes
 		#self.logger.debug(tmpNodes)
-		nSkipped = 0
+		#nSkipped = 0
 		for dev in indigo.devices.iter('indigo.zwave'):
 
-			endpoint = dev.ownerProps.get('zwDevEndPoint')
+			endpoint = dev.ownerProps.get('zwDevEndPoint') # Endpoint is Integer or None
 
-			if not dev.enabled:
-				self.extDebug(u'Skipping device id %s "%s" with endpoint %s - device disabled' % (unicode(dev.id), unicode(dev.name), endpoint))
-				nSkipped += 1
-				continue
+			# 			if not dev.enabled:
+			# 				self.extDebug(u'Skipping device id %s "%s" with endpoint %s - device disabled' % (unicode(dev.id), unicode(dev.name), endpoint))
+			# 				nSkipped += 1
+			# 				continue
+			# Commented 2017-01-16: Including all devices, in order to be able to select all devices in dialogs
 
 			if not dev.address in self.zNodes:
 				self.zNodes[dev.address] = {}
+				# Node id (dev.address) will be unicode type, keep it that way as that's how it's returned by Indigo
 			
 			#Check if this device has lower subindex, then replace previous device
 			#important with = below, to update existing devices
@@ -636,7 +638,8 @@ class Plugin(indigo.PluginBase):
 				self.zNodes[node][None] = self.zNodes[node][1]
 				self.extDebug(u'Device id %s "%s" has no device with endpoint None - copied from 1' % (unicode(self.zNodes[node][None].id), unicode(self.zNodes[node][None].name)))
 		
-		self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices. Skipped %s disabled devices' % (unicode(len(self.zNodes)), unicode(nSkipped)))
+		#self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices. Skipped %s disabled devices' % (unicode(len(self.zNodes)), unicode(nSkipped)))
+		self.logger.info(u'Finished mapping %s z-wave nodes to indigo devices.' % (unicode(len(self.zNodes))))
 		#self.extDebug(u'zNodes dict:\n%s' % unicode(self.zNodes))
 		
 	#####
@@ -670,8 +673,15 @@ class Plugin(indigo.PluginBase):
 		
 			if props[u'triggerFor'] == u'all':
 				devIter = indigo.devices.iter('indigo.zwave')
-			else:
+			elif props[u'triggerFor'] == u'selected':
 				devIter = [indigo.devices[int(d)] for d in props[u'devices']]
+			elif props[u'triggerFor'] == u'excludeSelected':
+				excludeNodeList = [indigo.devices[int(d)].address for d in props[u'devices']]
+				self.extDebug(u'excludeNodeList: %s' % (unicode(excludeNodeList)))
+				devIter = [d for d in indigo.devices.iter('indigo.zwave') if d.address not in excludeNodeList]
+			else:
+				self.logger.error(u'Trigger "%s" seems to be mis-configured, please check settings' % (trigger.name))
+				return False
 			
 			for dev in devIter:
 				self.extDebug(u'Mapping trigger for device id %s "%s", node %s' % (unicode(dev.id), unicode(dev.name), unicode(dev.address)))
@@ -855,7 +865,7 @@ class Plugin(indigo.PluginBase):
 		elif filter in [u'alarmTypesInclude', u'eventsInclude', u'eventsExclude', u'x80resetDeviceList']:
 			myArray = [
 				(u"all",u"All")]
-		elif filter in [u'alarmTypesExclude']:
+		elif filter in [u'alarmTypesExclude', u'zDeviceList']:
 			myArray = list()
 			
 		tmpArray = list()
@@ -909,6 +919,8 @@ class Plugin(indigo.PluginBase):
 				devIter = indigo.devices.iter('indigo.zwave')
 			elif props[u'triggerFor'] == u'selected':
 				devIter = [indigo.devices[int(d)] for d in props[u'devices']]
+			elif props[u'triggerFor'] == u'excludeSelected':
+				devIter = [d for d in indigo.devices.iter('indigo.zwave') if unicode(d.id) not in props[u'devices']]
 			else:
 				self.logger.warn(u'Trigger seems to be mis-configured, please check trigger configuration')
 				return myArray
@@ -919,6 +931,18 @@ class Plugin(indigo.PluginBase):
 			sortedDevArray = sorted ( devArray, key = operator.itemgetter(1))
 
 			myArray = myArray + sortedDevArray
+			
+		elif filter == u'zDeviceList':
+			devArray = list()
+			iterEndpoint = [None,1,2,3,4,5,6,7,8,9,10]
+			for node in self.zNodes:
+				for endpoint in iterEndpoint:
+					if endpoint in self.zNodes[node]:
+						dev = self.zNodes[node][endpoint]
+						devArray.append( (dev.id, dev.name) )
+						break # Only include devices with "lowest" endpoint
+			myArray = sorted (devArray, key = operator.itemgetter(1))		
+			
 
 		
 		tmpArray.sort()
