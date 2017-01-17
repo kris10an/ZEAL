@@ -13,6 +13,23 @@
 		<Label>Extensive debug log</Label>
 	</Field>
 	
+	<!-- Z-wave node stats -->
+	
+	<Field type="label" id="emptylabel6">
+		<Label>
+		</Label>
+	</Field>
+	<Field type="label" id="statsHeading" fontColor="blue" fontSize="large">
+		<Label>Z-wave node statistics:</Label>
+	</Field>
+	<Field type="separator" id="separatorStats"/>
+	<Field type="checkbox" id="keepStats" defaultValue="false">
+		<Label>Keep node statistics:</Label>
+	</Field>
+	<Field type="label" id="keepStatsLabel" fontSize="small" fontColor="darkgray">
+		<Label>Will result in some increased load for plugin</Label>
+	</Field>
+	
 	<!-- VARIABLES -->
 	
 	<Field type="label" id="emptylabel1">

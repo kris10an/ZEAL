@@ -91,6 +91,12 @@ def removeTriggerFromDict(d, triggerId):
 			raise ValueError(u'Possible error in triggerMap dictionary, v: %s' % unicode(v))
 	return d
 
+########################################
+# Return pre-filled (empty) list for z-wave node stats, self.nodeStats
+def emptyNodeStatList():
+	# nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+	return [0]*9
+
 
 # FIX, check json dumps for integer keys as that is not supported
 ################################################################################
@@ -143,6 +149,21 @@ class Plugin(indigo.PluginBase):
 	def shutdown(self):
 		self.logger.debug(u"shutdown called")
 
+		# moved to stopThread in runConcurrentThread, don't believe the below saved prefs at all times		
+		# 		if self.keepStats:
+		# 			self.logger.debug(u'Saving z-wave node statistics')
+		# 			self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+
+	########################################
+	def wakeUp(self):
+	   indigo.PluginBase.wakeUp(self)
+	   self.logger.debug("wakeUp method called")
+
+	########################################
+	def prepareToSleep(self):
+	   indigo.PluginBase.prepareToSleep(self)
+	   self.logger.debug("prepareToSleep method called")
+
 	########################################
 	def extDebug(self, msg):
 		if self.extensiveDebug:
@@ -170,6 +191,11 @@ class Plugin(indigo.PluginBase):
 		# ERROR		: Errors not critical for plugin execution
 		# CRITICAL	: Errors critical for plugin execution, plugin will stop
 		
+		self.keepStats = self.pluginPrefs.get(u'keepStats', False)
+		if self.keepStats:
+			self.nodeStats = self.load(self.pluginPrefs.get(u'nodeStats', self.store(dict()))) # see def emptyNodeStatList() for description
+		
+		
 	########################################
 	# If runConcurrentThread() is defined, then a new thread is automatically created
 	# and runConcurrentThread() is called in that thread after startup() has been called.
@@ -181,13 +207,22 @@ class Plugin(indigo.PluginBase):
 		try:
 			counter = 0
 			while True:
+				self.logger.debug(u'runConcurrentThread')
+				
 				if counter > 0:
 					self.getZwaveNodeDevMap()
-				self.logger.debug(u'runConcurrentThread')
+				
+					if self.keepStats:
+						self.logger.debug(u'Periodically saving z-wave node statistics')
+						self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+					
 				counter += 1
 				self.sleep(3600)
 		except self.StopThread:
-			pass
+			self.logger.debug(u'runConcurrentThread self.StopThread')
+			if self.keepStats:
+				self.logger.debug(u'Periodically saving z-wave node statistics')
+				self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
 		# 		if self.errorState:
 		# 			# FIX, find some way to shutdown if there are errors
 		# 			self.logger.error(u'Plugin in error state, stopping concurrent thread')
@@ -204,6 +239,7 @@ class Plugin(indigo.PluginBase):
 		
 		eventStr = list()
 		debugStr = list()
+		updateStats = ['in']
 		
 		if CC in self.zDefs:
 			byteListStr = convertListToHexStr(byteList)
@@ -222,6 +258,9 @@ class Plugin(indigo.PluginBase):
 			
 			# Notification report
 			if CC == u'0x71' and byteList[8] == 5:
+			
+				updateStats.append('notification')
+				
 				if byteList[9] != 0: # Alarm command version 1
 					self.logger.debug(u"received: %s (node %03d, endpoint %s)" % (byteListStr, nodeId, endpoint))
 					self.logger.debug(u'Command class:		%s (%s)' % (CC, self.zDefs[CC][u'description']))
@@ -263,6 +302,8 @@ class Plugin(indigo.PluginBase):
 					
 			# Battery report
 			elif CC == u'0x80' and byteList[8] == 3: # Battery report
+			
+				updateStats.append('batteryReport')
 			
 				# FIX, move triggerId loop inside if's, to avoid having duplicated log entries in case of multiple triggers
 			
@@ -430,7 +471,8 @@ class Plugin(indigo.PluginBase):
 							continue
 							
 						indigo.variable.updateValue(var, value=unicode(varVal))
-							
+
+		self.updateNodeStats(cmd['nodeId'], *updateStats)			
 
 	def zwaveCommandSent(self, cmd):
 	
@@ -444,6 +486,8 @@ class Plugin(indigo.PluginBase):
 		triggered = False
 		debugStr = list()
 		eventStr = list()
+		updateStats = list()
+		updateProps = dict()
 		
 		# get device, only if we need it later
 		if not cmdSuccess or timeDelta >= 100:
@@ -469,9 +513,12 @@ class Plugin(indigo.PluginBase):
 							if not triggered:
 								eventStr.append(u'"%s" slow ACK time (%d ms) on sent z-wave command: %s' % (devName, timeDelta, byteListStr))
 								self.logger.warn(eventStr[-1])
+								updateStats.append('slowAck')
 							indigo.trigger.execute(trigger)
 							triggered = True
 							updateVariables = True
+				updateStats.append('out')
+				updateProps['ackTime'] = timeDelta
 			else:
 				self.extDebug(u"sent: %s (ACK after %d milliseconds)" % (byteListStr, timeDelta))
 		else:
@@ -488,6 +535,7 @@ class Plugin(indigo.PluginBase):
 						indigo.trigger.execute(trigger)
 						triggered = True
 						updateVariables = True
+				updateStats.add('noAck')
 						
 		# Update variables, set in plugin prefs
 		if updateVariables:
@@ -503,8 +551,55 @@ class Plugin(indigo.PluginBase):
 						continue
 						
 					indigo.variable.updateValue(var, value=unicode(varVal))
+					
+		# Update Z-wave node statistics
+		if nodeId:
+			self.updateNodeStats(nodeId, *updateStats, **updateProps)
+		
+	########################################
+	# Update Z-wave node statistics
+	#
+	# self.nodeStats dict form:
+	# nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+	#
+	# *updateStat:
+	# 'in', 'out', 'noAck', 'slowAck', 'notification', 'batteryReport'
+	#
+	# **statProps: <dict>
+	# ackTime = <int>
+	def updateNodeStats(self, nodeId, *updateStats, **statProps):
+	
+		map = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'notification' : 7, 'batteryReport' : 8 }
+						
+		if not self.keepStats:
+			self.extDebug(u'Not updating node statistics, disabled in plugin config')
+			return
+			
+		self.extDebug(u'Updating z-wave node statistics')
+		try:
+			nodeIdStr = unicode(nodeId)
+		except:
+			self.logger.error(u'updateNodeStats: Invalid node id specified')
+			return False
+			
+		if nodeIdStr not in self.nodeStats:
+			self.nodeStats[nodeIdStr] = emptyNodeStatList()
 				
-
+		if 'ackTime' in statProps and 'out' in updateStats:
+			# min ack time
+			if statProps['ackTime'] < self.nodeStats[nodeIdStr][4] or self.nodeStats[nodeIdStr][4] == 0: self.nodeStats[nodeIdStr][4] = statProps['ackTime']
+			#max ack time
+			if statProps['ackTime'] > self.nodeStats[nodeIdStr][5]: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
+			#acg ack time, possibly FIX, slightly inaccurate
+			self.nodeStats[nodeIdStr][6] = ((self.nodeStats[nodeIdStr][1] * self.nodeStats[nodeIdStr][6]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
+						
+		for stat in updateStats:
+			#self.extDebug(u'stat prop: %s' % stat)
+			if stat in map:
+				self.nodeStats[nodeIdStr][map[stat]] += 1
+			
+					
+				
 	########################################
 	def triggerStartProcessing(self, trigger):
 		self.logger.debug(u'Start processing trigger "%s"' % (unicode(trigger.name)))
