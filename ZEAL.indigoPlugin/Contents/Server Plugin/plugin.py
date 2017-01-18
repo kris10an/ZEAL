@@ -12,6 +12,7 @@ import json, operator
 from lib.csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 from lib.strVarTime import prettyDate, strToTime, timeToStr, timeDiff
 from collections import defaultdict
+from tabulate import tabulate
 
 # Note the "indigo" module is automatically imported and made available inside
 # our global name space by the host process.
@@ -45,6 +46,10 @@ eventCC = {
 zFolder = u'Z-Wave'
 
 variableEnablePrefs = [u'triggeringNodeId', u'triggeringDeviceId', u'triggeringDeviceName', u'triggeringEventText']
+
+## nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+nodeStatsKeys = ['in', 'out', 'noAck', 'slowAck', 'minAckTime', 'maxAckTime', 'avgAckTime', 'notification', 'batteryReport']
+nodeStatsMap = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'minAckTime' : 4, 'maxAckTime' : 5, 'avgAckTime': 6, 'notification' : 7, 'batteryReport' : 8 }
 
 ########################################
 # Tiny function to convert a list of integers (bytes in this case) to a
@@ -569,7 +574,8 @@ class Plugin(indigo.PluginBase):
 	# ackTime = <int>
 	def updateNodeStats(self, nodeId, *updateStats, **statProps):
 	
-		map = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'notification' : 7, 'batteryReport' : 8 }
+		#map = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'notification' : 7, 'batteryReport' : 8 }
+		map = nodeStatsMap
 						
 		if not self.keepStats:
 			self.extDebug(u'Not updating node statistics, disabled in plugin config')
@@ -591,7 +597,7 @@ class Plugin(indigo.PluginBase):
 			#max ack time
 			if statProps['ackTime'] > self.nodeStats[nodeIdStr][5]: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
 			#acg ack time, possibly FIX, slightly inaccurate
-			self.nodeStats[nodeIdStr][6] = ((self.nodeStats[nodeIdStr][1] * self.nodeStats[nodeIdStr][6]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
+			self.nodeStats[nodeIdStr][6] = ((float(self.nodeStats[nodeIdStr][1]) * self.nodeStats[nodeIdStr][6]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
 						
 		for stat in updateStats:
 			#self.extDebug(u'stat prop: %s' % stat)
@@ -935,8 +941,54 @@ class Plugin(indigo.PluginBase):
 		
 		return True
 
+	# Print z-wave node statistics to log
+	def printNodeStatsToLog(self, action = None):
 		
+		statData = self.getNodeStats()
+		
+		self.logger.info(u'\n' + tabulate.tabulate(statData, headers='keys'))
 
+	def getNodeStats(self, deviceList = None):
+		
+		stats = dict()
+		stats[u'Node'] = list()
+		stats[u'Device'] = list()
+		for s in nodeStatsKeys:
+			stats[s] = list()
+		
+		if deviceList is None:
+			nodeIter = [n for n in self.zNodes]
+			
+		iterEndpoint = [None,1,2,3,4,5,6,7,8,9,10]
+		
+		for nodeId in nodeIter: #nodeId is unicode
+						
+			if nodeId not in self.nodeStats:
+				continue
+			
+			for endpoint in iterEndpoint:
+				if endpoint in self.zNodes[nodeId]:
+					dev = self.zNodes[nodeId][endpoint]
+					break # Only include devices with "lowest" endpoint
+			else:
+				break # Skip the node if it is not found in self.zNodes
+			
+			stats[u'Node'].append(nodeId)
+			stats[u'Device'].append(dev.name)
+			
+			for s, i in nodeStatsMap.items(): # stat key, index
+				#self.logger.debug(s)
+				#self.logger.debug(i)
+				stats[s].append(self.nodeStats[nodeId][i])
+				
+		return stats
+		
+	def resetNodeStats(self, action = None):
+	
+		self.logger.info(u'Resetting all Z-wave node statistics')
+		self.nodeStats = dict()
+		self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+			
 
 	########################################
 	# UI List generators and callbackmethods
@@ -1027,6 +1079,7 @@ class Plugin(indigo.PluginBase):
 
 			myArray = myArray + sortedDevArray
 			
+		# FIX if some way to get 'main' device exists/ is created
 		elif filter == u'zDeviceList':
 			devArray = list()
 			iterEndpoint = [None,1,2,3,4,5,6,7,8,9,10]

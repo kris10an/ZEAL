@@ -11,4 +11,12 @@
 		<Name>Reset triggering on battery level...</Name>
 		<ConfigUI actionId="resetTriggerBatteryLevel"/>
 	</MenuItem>
+	<MenuItem id="printNodeStatsToLog">
+		<Name>Output Z-wave node statistics to Indigo log</Name>
+		<CallbackMethod>printNodeStatsToLog</CallbackMethod>
+	</MenuItem>
+	<MenuItem id="resetNodeStats">
+		<Name>RESET ALL Z-wave node statistics</Name>
+		<CallbackMethod>resetNodeStats</CallbackMethod>
+	</MenuItem>
 </MenuItems>

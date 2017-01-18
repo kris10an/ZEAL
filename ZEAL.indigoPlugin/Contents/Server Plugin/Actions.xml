@@ -25,4 +25,8 @@ If trigger is set to automatically reset above certain battery level, this is no
 			</Field>
 		</ConfigUI>
 	</Action>
+	<Action id="printNodeStatsToLog">
+		<Name>Output Z-wave node statistics to Indigo log</Name>
+		<CallbackMethod>printNodeStatsToLog</CallbackMethod>
+	</Action>
 </Actions>

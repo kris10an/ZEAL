@@ -26,7 +26,7 @@
 	<Field type="checkbox" id="keepStats" defaultValue="false">
 		<Label>Keep node statistics:</Label>
 	</Field>
-	<Field type="label" id="keepStatsLabel" fontSize="small" fontColor="darkgray">
+	<Field type="label" id="keepStatsLabel" fontSize="small" fontColor="darkgray" alignWithControl="true">
 		<Label>Will result in some increased load for plugin</Label>
 	</Field>
 	
