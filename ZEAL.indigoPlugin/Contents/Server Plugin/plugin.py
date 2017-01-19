@@ -13,6 +13,8 @@ from lib.csvUnicode import unicodeReader, unicodeWriter, UTF8Recoder
 from lib.strVarTime import prettyDate, strToTime, timeToStr, timeDiff
 from collections import defaultdict
 from tabulate import tabulate
+#from texttable.texttable import Texttable
+from operator import itemgetter
 
 # Note the "indigo" module is automatically imported and made available inside
 # our global name space by the host process.
@@ -47,9 +49,10 @@ zFolder = u'Z-Wave'
 
 variableEnablePrefs = [u'triggeringNodeId', u'triggeringDeviceId', u'triggeringDeviceName', u'triggeringEventText']
 
-## nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+##self.nodeStats	 nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
 nodeStatsKeys = ['in', 'out', 'noAck', 'slowAck', 'minAckTime', 'maxAckTime', 'avgAckTime', 'notification', 'batteryReport']
 nodeStatsMap = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'minAckTime' : 4, 'maxAckTime' : 5, 'avgAckTime': 6, 'notification' : 7, 'batteryReport' : 8 }
+#nodeStatsHeaders = {u'node' : u'Node', u'device' : u'Device', u'Cmds: In', u'Out', u'Notifications', u'Batt.reports', u'# Ack triggers: Slow', u'No Ack', u'AckTime (ms): Min', u'Max', u'Avg'}
 
 ########################################
 # Tiny function to convert a list of integers (bytes in this case) to a
@@ -121,6 +124,9 @@ class Plugin(indigo.PluginBase):
 		self.triggerMap = treeDD() # Map of node -> Z-wave commands -> trigger id
 		self.triggers = dict()
 		self.zNodes = {} # Map of zwave nodes to indigo devices
+		
+		# FIX, remove once tested
+		self.totalAck = {}
 		
 		# get Z-wave defs, types and events from file
 		self.getZwaveDefs()
@@ -598,7 +604,12 @@ class Plugin(indigo.PluginBase):
 			if statProps['ackTime'] > self.nodeStats[nodeIdStr][5]: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
 			#acg ack time, possibly FIX, slightly inaccurate
 			self.nodeStats[nodeIdStr][6] = ((float(self.nodeStats[nodeIdStr][1]) * self.nodeStats[nodeIdStr][6]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
-						
+					
+			# FIX; remove once tested
+			if not nodeIdStr in self.totalAck:
+				self.totalAck[nodeIdStr] = 0
+			self.totalAck[nodeIdStr] += statProps['ackTime']
+			self.logger.warn(u'nodeId: %s, ackTime: %d, out: %d, total ackTime: %d' % 	(nodeIdStr, statProps['ackTime'], self.nodeStats[nodeIdStr][1]+1, self.totalAck[nodeIdStr]))
 		for stat in updateStats:
 			#self.extDebug(u'stat prop: %s' % stat)
 			if stat in map:
@@ -944,27 +955,49 @@ class Plugin(indigo.PluginBase):
 	# Print z-wave node statistics to log
 	def printNodeStatsToLog(self, action = None):
 		
-		statData = self.getNodeStats()
+		headers, statData = self.getNodeStats()
+		statData = sorted(statData, key=itemgetter(1))
 		
-		self.logger.info(u'\n' + tabulate.tabulate(statData, headers='keys'))
+		self.logger.info(u'\n' + tabulate.tabulate(statData, headers=headers, floatfmt='.0f'))
+		# 		table = Texttable()
+		# 		table.header(headers)
+		# 		table.add_rows(statData, header=False)
+		# 		table.set_cols_width([4,30,9,5,13,13,10,10,13,7,7])
+		# 		table.set_deco(Texttable.BORDER | Texttable.HEADER)
+		# 		table.set_precision(0)
+		# 		self.logger.info(u'\n' + table.draw())
 
-	def getNodeStats(self, deviceList = None):
+	def getNodeStats(self, deviceList = None, columnOrder = None, headers = None):
+	
+		##self.nodeStats	 nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
 		
-		stats = dict()
-		stats[u'Node'] = list()
-		stats[u'Device'] = list()
-		for s in nodeStatsKeys:
-			stats[s] = list()
+		if headers is None:
+			#headers = [u'Node', u'Device', u'Num Cmds:\nIn', u'Out', u'Notifications', u'Batt.reports', u'Number of:\nNo Ack.', u'Slow Ack', u'AckTime (ms):\nMin', u'Max', u'Avg']
+			headers = [u'Node', u'Device', u'In', u'Out', u'Notif.', u'Batt.', u'No Ack', u'Slow Ack', u'Ack min.', u'Ack max', u'Ack avg']
+			
+	
+		defValue = u'-'
 		
+		if columnOrder is None:
+			columnOrder = [0,1,7,8,2,3,4,5,6]
+			
 		if deviceList is None:
 			nodeIter = [n for n in self.zNodes]
+		
+		stats = list()
+		
+		#for header in headers:
+		#	stats[header] = list()
+		
 			
 		iterEndpoint = [None,1,2,3,4,5,6,7,8,9,10]
 		
 		for nodeId in nodeIter: #nodeId is unicode
+		
+			rowList = list()
 						
 			if nodeId not in self.nodeStats:
-				continue
+				continue 
 			
 			for endpoint in iterEndpoint:
 				if endpoint in self.zNodes[nodeId]:
@@ -973,15 +1006,17 @@ class Plugin(indigo.PluginBase):
 			else:
 				break # Skip the node if it is not found in self.zNodes
 			
-			stats[u'Node'].append(nodeId)
-			stats[u'Device'].append(dev.name)
+			rowList.append(nodeId)
+			rowList.append(dev.name)
 			
-			for s, i in nodeStatsMap.items(): # stat key, index
+			for i in columnOrder: # stat key, index
 				#self.logger.debug(s)
 				#self.logger.debug(i)
-				stats[s].append(self.nodeStats[nodeId][i])
+				rowList.append(self.nodeStats[nodeId][i])
 				
-		return stats
+			stats.append(rowList)
+				
+		return headers, stats
 		
 	def resetNodeStats(self, action = None):
 	
