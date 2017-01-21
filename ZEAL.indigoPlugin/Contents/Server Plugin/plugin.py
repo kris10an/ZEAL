@@ -546,7 +546,7 @@ class Plugin(indigo.PluginBase):
 						indigo.trigger.execute(trigger)
 						triggered = True
 						updateVariables = True
-				updateStats.add('noAck')
+				updateStats.append('noAck')
 						
 		# Update variables, set in plugin prefs
 		if updateVariables:
@@ -976,7 +976,7 @@ class Plugin(indigo.PluginBase):
 			headers = [u'Node', u'Device', u'In', u'Out', u'Notif.', u'Batt.', u'No Ack', u'Slow Ack', u'Ack min.', u'Ack max', u'Ack avg']
 			
 	
-		defValue = u'-'
+		defValue = u' '
 		
 		if columnOrder is None:
 			columnOrder = [0,1,7,8,2,3,4,5,6]
@@ -1012,7 +1012,10 @@ class Plugin(indigo.PluginBase):
 			for i in columnOrder: # stat key, index
 				#self.logger.debug(s)
 				#self.logger.debug(i)
-				rowList.append(self.nodeStats[nodeId][i])
+				value = self.nodeStats[nodeId][i]
+				#if value == 0:
+				#	value = defValue
+				rowList.append(value)
 				
 			stats.append(rowList)
 				
