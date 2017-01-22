@@ -140,7 +140,7 @@ class Plugin(indigo.PluginBase):
 		self.setUpdatePluginPrefs()
 		
 		# FIX, remove once tested
-		self.totalAck = {}
+		#self.totalAck = {}
 		
 		# get Z-wave defs, types and events from file
 		self.getZwaveDefs()
@@ -634,14 +634,14 @@ class Plugin(indigo.PluginBase):
 			if statProps['ackTime'] < self.nodeStats[nodeIdStr][5] or self.nodeStats[nodeIdStr][5] == 0: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
 			#max ack time
 			if statProps['ackTime'] > self.nodeStats[nodeIdStr][6]: self.nodeStats[nodeIdStr][6] = statProps['ackTime']
-			#acg ack time, possibly FIX, slightly inaccurate
+			#acg ack time, possibly FIX, slightly inaccurate -> 2017-01-22: Should now be accurate as ignoring with ackTime 0. FIX when Indigo 7.0.3 is out
 			self.nodeStats[nodeIdStr][7] = ((float(self.nodeStats[nodeIdStr][1]) * self.nodeStats[nodeIdStr][7]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
 					
 			# FIX; remove once tested
-			if not nodeIdStr in self.totalAck:
-				self.totalAck[nodeIdStr] = 0
-			self.totalAck[nodeIdStr] += statProps['ackTime']
-			self.logger.warn(u'nodeId: %s, ackTime: %d, out: %d, total ackTime: %d' % 	(nodeIdStr, statProps['ackTime'], self.nodeStats[nodeIdStr][1]+1, self.totalAck[nodeIdStr]))
+			#if not nodeIdStr in self.totalAck:
+			#	self.totalAck[nodeIdStr] = 0
+			#self.totalAck[nodeIdStr] += statProps['ackTime']
+			#self.logger.warn(u'nodeId: %s, ackTime: %d, out: %d, total ackTime: %d' % 	(nodeIdStr, statProps['ackTime'], self.nodeStats[nodeIdStr][1]+1, self.totalAck[nodeIdStr]))
 		for stat in updateStats:
 			#self.extDebug(u'stat prop: %s' % stat)
 			if stat in nodeStatsMap:
@@ -916,7 +916,7 @@ class Plugin(indigo.PluginBase):
 		
 		# [<plugin pref for enable of plugin>, <plugin id>, <Friendly name>, <min plugin version>]
 		pluginList = [
-			[u'plugin-betteremail', u'com.flyingdiver.indigoplugin.betteremail', u'Better E-mail', u'7.0.2']
+			[u'plugin-betteremail', u'com.flyingdiver.indigoplugin.betteremail', u'Better E-mail', u'7.1.0']
 			]
 			
 		for plug in pluginList:
@@ -933,7 +933,7 @@ class Plugin(indigo.PluginBase):
 					if not indigoPlug.isEnabled():
 						raise ImportError(u'Plugin "%s" is not enabled, please install/enable, and re-enable in ZEAL plugin preferences' % plug[2])
 					if len(indigoPlug.pluginVersion) == 0 or indigoPlug.pluginVersion < plug[3]:
-						raise ImportError(u'Plugin "%s" version %s is less than ZEAL requires, please update the plugin. Use of this plugin in ZEAL has been disabled' % (plug[2], indigoPlug.pluginVersion))
+						raise ImportError(u'Plugin "%s" version %s is less than ZEAL requires (%s), please update the plugin.\nUse of this plugin in ZEAL has been disabled' % (plug[2], indigoPlug.pluginVersion, plug[3]))
 						
 					# Plugin specific checks:
 					if plug[1] == u'com.flyingdiver.indigoplugin.betteremail':
@@ -979,7 +979,6 @@ class Plugin(indigo.PluginBase):
 		self.extDebug(u'action: %s' % unicode(action))
 		
 		props = action.props
-		#FIX implement reset for low battery report
 				
 		try:
 			trigger = indigo.triggers[int(props[u'trigger'])]
@@ -1728,6 +1727,35 @@ class Plugin(indigo.PluginBase):
 				errorDict[u'resetDevice'] = u'Could not get selected device from Indigo'
 				return (False, valuesDict, errorDict)
 				
+		elif typeId == u'printNodeStatsToLogOrEmail':
+			
+			if (not valuesDict[u'indigoLog']) and (not valuesDict[u'email']):
+				errorDict[u'indigoLog'] = u'Please select at least one delivery method'
+				errorDict[u'email'] = u'Please select at least one delivery method'
+				
+			if valuesDict[u'email']:
+				if len(valuesDict[u'emailAddress']) == 0:
+					errorDict[u'emailAddress'] = u'Please specify an e-mail address'
+				if not self.validateEmail(valuesDict[u'emailAddress']):
+					errorDict[u'emailAddress'] = u'Invalid e-mail address specified'
+					
+			if valuesDict[u'includeFor'] in [u'selected', u'excludeSelected']:
+				if len(valuesDict[u'devices']) == 0:
+					errorDict[u'devices'] = u'Please choose at least one device'
+					
+			if valuesDict[u'includedColumns'] == u'selected':
+				if len(valuesDict[u'columns']) == 0:
+					errorDict[u'columns'] = u'Please choose at least one column to be included'
+					
+			if len(valuesDict[u'orderBy']) > 0:
+				if valuesDict[u'includedColumns'] == u'selected':
+					if valuesDict[u'orderBy'] not in valuesDict[u'columns']:
+						errorDict[u'orderBy'] = u'The selected order by column needs to be selected as an included column'
+					
+			if len(errorDict) > 0:
+				errorDict[u'showAlertText'] = u'\n'.join(set([value for key, value in errorDict.items()]))
+				return (False, valuesDict, errorDict)
+				
 					
 				
 		return (True, valuesDict)
@@ -1757,4 +1785,19 @@ class Plugin(indigo.PluginBase):
 	
 	def load(self, val):
 		return json.loads(val)
+		
+	# Validate e-mail addres:
+	def validateEmail(self, emailStr):
+		# very simple e-mail validation
+		if len(emailStr) >= 7:
+			self.extDebug(u'E-mail over 6 characters')
+			pos = emailStr.find(u'@',1)
+			if pos != -1:
+				self.extDebug(u'@ found in e-mail')
+				pos2 = emailStr.find(u'.',pos)
+				if pos2 != -1:
+					self.extDebug(u'. found in e-mail after @')
+					return True
+
+		return False
 
