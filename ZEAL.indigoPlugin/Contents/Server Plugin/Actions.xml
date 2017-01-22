@@ -25,8 +25,83 @@ If trigger is set to automatically reset above certain battery level, this is no
 			</Field>
 		</ConfigUI>
 	</Action>
-	<Action id="printNodeStatsToLog">
-		<Name>Output Z-wave node statistics to Indigo log</Name>
-		<CallbackMethod>printNodeStatsToLog</CallbackMethod>
+	<Action id="printNodeStatsToLogOrEmail">
+		<Name>Z-wave node statistics to E-mail or Indigo log</Name>
+		<CallbackMethod>printNodeStatsToLogEmail</CallbackMethod>
+		<ConfigUI>
+			<Field type="checkbox" id="indigoLog" defaultValue="true">
+				<Label>Output to Indigo log:</Label>
+			</Field>
+			<Field type="checkbox" id="email" defaultValue="false">
+				<Label>Send as e-mail:</Label>
+			</Field>
+			<Field id="emailAddress" type="textfield" visibleBindingId="email" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+				<Label>E-mail address:</Label>
+			</Field>
+			<Field id="emailSubject" type="textfield" visibleBindingId="email" visibleBindingValue="true" defaultValue="Indigo ZEAL Z-wave node statistics" alwaysUseInDialogHeightCalc="true">
+				<Label>E-mail Subject:</Label>
+			</Field>
+			<Field id="emailBody" type="textfield" visibleBindingId="email" visibleBindingValue="true" defaultValue="" alwaysUseInDialogHeightCalc="true">
+				<Label>E-mail Body:
+				
+				
+				</Label>
+			</Field>
+			<Field id="emailSubjectLabel" type="label" fontSize="small" fontColor="darkgray" alignWithControl="true" visibleBindingId="email" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+				<Label>E-mail address, subject and body supports device/variable substitution:
+%%v:VARID%%, %%d:DEVICEID:STATEKEY%%
+
+Use Alt+Enter for "soft" line breaks in body, &lt;br&gt; for html line breaks</Label>
+			</Field>
+			<Field type="label" id="emptylabel">
+				<Label></Label>
+			</Field>
+			<Field type="separator" id="separator1"/>
+			<Field type="label" id="emptylabel2">
+				<Label></Label>
+			</Field>
+        	<Field type="menu" id="includeFor" defaultValue="all">
+        		<Label>Included in statistics:</Label>
+        		<List>
+        			<Option value="all">All Z-wave devices</Option>
+        			<Option value="excludeSelected">All, except selected Z-wave devices</Option>
+        			<Option value="selected">Selected devices</Option>
+        		</List>
+        	</Field>
+        	<Field type="list" id="devices" rows="6" visibleBindingId="includeFor" visibleBindingValue="selected,excludeSelected" alwaysUseInDialogHeightCalc="true">
+        		<Label>Select devices:</Label>
+        		<List class="self" method="getUIList" filter="zDeviceList"/>
+        	</Field>
+        	
+        	
+        	<Field type="menu" id="includedColumns" defaultValue="all">
+        		<Label>Included columns:</Label>
+        		<List>
+        			<Option value="all">All columns</Option>
+        			<Option value="selected">Selected columns</Option>
+        		</List>
+        	</Field>
+        	<Field type="list" id="columns" rows="6" visibleBindingId="includedColumns" visibleBindingValue="selected" alwaysUseInDialogHeightCalc="true">
+        		<Label>Select columns:</Label>
+        		<List class="self" method="getUIList" filter="nodeStatsColumns"/>
+        	</Field>
+			<Field type="label" id="emptylabel3">
+				<Label></Label>
+			</Field>
+        	<Field type="menu" id="orderBy" alwaysUseInDialogHeightCalc="true">
+        	<!-- Unfortunately no way to set default value for dynamic lists -->
+        		<Label>Order By:</Label>
+        		<List class="self" method="getUIList" filter="nodeStatsColumnsOrder"/>
+        	</Field>
+			<Field type="label" id="emptylabel4">
+				<Label></Label>
+			</Field>
+			<Field id="defValue" type="textfield" defaultValue="-">
+				<Label>No value default:</Label>
+			</Field>
+			<Field type="label" id="defValueLabel" fontColor="darkgray" fontSize="small">
+				<Label>Will be used when no value exists</Label>
+			</Field>
+		</ConfigUI>
 	</Action>
 </Actions>

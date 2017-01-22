@@ -49,9 +49,21 @@ zFolder = u'Z-Wave'
 
 variableEnablePrefs = [u'triggeringNodeId', u'triggeringDeviceId', u'triggeringDeviceName', u'triggeringEventText']
 
-##self.nodeStats	 nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
-nodeStatsKeys = ['in', 'out', 'noAck', 'slowAck', 'minAckTime', 'maxAckTime', 'avgAckTime', 'notification', 'batteryReport']
-nodeStatsMap = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'minAckTime' : 4, 'maxAckTime' : 5, 'avgAckTime': 6, 'notification' : 7, 'batteryReport' : 8 }
+##self.nodeStats	 nodeId<str> : [numIn, numOut, numOutNoReply, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+#nodeStatsKeys = ['in', 'out', 'outNR', 'noAck', 'slowAck', 'minAckTime', 'maxAckTime', 'avgAckTime', 'notification', 'batteryReport']
+#nodeStatsMap = { 'in' : 0, 'out' : 1, 'outNR' : 2, 'noAck' : 3, 'slowAck' : 4, 'minAckTime' : 5, 'maxAckTime' : 6, 'avgAckTime': 7, 'notification' : 8, 'batteryReport' : 9 }
+# 			headers = [u'Node', u'Device', u'In', u'Out', u'Notif.', u'Batt.', u'No Ack', u'Slow Ack', u'Ack min.', u'Ack max', u'Ack avg']
+nodeStatsConf = [
+	['in', u'In', 2], ['out', u'Out', 3], ['outNR', u'OutNoReply', 4], ['noAck', u'NoAcks', 7], ['slowAck', u'SlowAckTrigs.', 8],
+	['minAckTime', u'AckMin.', 9], ['maxAckTime', u'AckMax', 10], ['avgAckTime', u'AckAvg', 11], 
+	['notification', u'Notif.Rep.', 5], ['batteryReport', u'Batt.Rep.', 6] ]
+	# Ordered same as self.nodeStats
+	# [<property name>, <Header desc.>, <Header order>]
+nodeStatsMap = dict()
+for i, j in enumerate(nodeStatsConf):
+	nodeStatsMap[j[0]] = i
+
+
 #nodeStatsHeaders = {u'node' : u'Node', u'device' : u'Device', u'Cmds: In', u'Out', u'Notifications', u'Batt.reports', u'# Ack triggers: Slow', u'No Ack', u'AckTime (ms): Min', u'Max', u'Avg'}
 
 ########################################
@@ -102,8 +114,8 @@ def removeTriggerFromDict(d, triggerId):
 ########################################
 # Return pre-filled (empty) list for z-wave node stats, self.nodeStats
 def emptyNodeStatList():
-	# nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
-	return [0]*9
+	# nodeId<str> : [numIn, numOut, numOutNr, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+	return [0]*10
 
 
 # FIX, check json dumps for integer keys as that is not supported
@@ -115,15 +127,17 @@ class Plugin(indigo.PluginBase):
 		super(Plugin, self).__init__(pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
 
 		self.errorState = False
-	
-		# Set plugin preferences
-		self.setUpdatePluginPrefs()
-		
+
 		self.zDefs = zDefs # Definition of Z-wave commands etc.
 		self.subscribedOutgoing = False # Set initial value to false, will be enabled if there are triggers
 		self.triggerMap = treeDD() # Map of node -> Z-wave commands -> trigger id
 		self.triggers = dict()
 		self.zNodes = {} # Map of zwave nodes to indigo devices
+		self.dependantPlugins = dict() # Plugins that this plugin relies on
+		self.outgoingTriggers = False # Wheter or not there are triggers for outgoing triggers
+			
+		# Set plugin preferences
+		self.setUpdatePluginPrefs()
 		
 		# FIX, remove once tested
 		self.totalAck = {}
@@ -148,7 +162,8 @@ class Plugin(indigo.PluginBase):
 		self.logger.debug(u'Subscribing to incoming Z-wave commands')
 		indigo.zwave.subscribeToIncoming()
 		
-		if self.checkOutgoingTriggers():
+		self.outgoingTriggers = self.checkOutgoingTriggers()
+		if self.outgoingTriggers:
 			self.logger.debug(u'Subscribing to outgoing Z-wave commands, as there are triggers for outgoing')
 			self.subscribedOutgoing = True
 			indigo.zwave.subscribeToOutgoing()
@@ -205,6 +220,16 @@ class Plugin(indigo.PluginBase):
 		self.keepStats = self.pluginPrefs.get(u'keepStats', False)
 		if self.keepStats:
 			self.nodeStats = self.load(self.pluginPrefs.get(u'nodeStats', self.store(dict()))) # see def emptyNodeStatList() for description
+			
+			# Update older versions of nodeStats
+			for l in self.nodeStats:
+				# after adding outNR
+				if len(l) == 9:
+					l = l[0:1] + [0] + l[2:]
+					
+		# Check plugin dependencies
+		self.checkDependantPlugins()
+					
 		
 		
 	########################################
@@ -220,12 +245,18 @@ class Plugin(indigo.PluginBase):
 			while True:
 				self.logger.debug(u'runConcurrentThread')
 				
-				if counter > 0:
+				if counter > 0: # Skip on first loop
 					self.getZwaveNodeDevMap()
 				
 					if self.keepStats:
 						self.logger.debug(u'Periodically saving z-wave node statistics')
 						self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+						
+					# Check plugin dependencies
+					self.checkDependantPlugins()
+					
+					# Checking for outgoing triggers
+					self.outgoingTriggers = self.checkOutgoingTriggers()
 					
 				counter += 1
 				self.sleep(3600)
@@ -528,7 +559,8 @@ class Plugin(indigo.PluginBase):
 							indigo.trigger.execute(trigger)
 							triggered = True
 							updateVariables = True
-				updateStats.append('out')
+				if timeDelta > 0: updateStats.append('out')
+				else: updateStats.append('outNR')
 				updateProps['ackTime'] = timeDelta
 			else:
 				self.extDebug(u"sent: %s (ACK after %d milliseconds)" % (byteListStr, timeDelta))
@@ -571,7 +603,7 @@ class Plugin(indigo.PluginBase):
 	# Update Z-wave node statistics
 	#
 	# self.nodeStats dict form:
-	# nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
+	# nodeId<str> : [numIn, numOut, numOurNR, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
 	#
 	# *updateStat:
 	# 'in', 'out', 'noAck', 'slowAck', 'notification', 'batteryReport'
@@ -581,7 +613,7 @@ class Plugin(indigo.PluginBase):
 	def updateNodeStats(self, nodeId, *updateStats, **statProps):
 	
 		#map = { 'in' : 0, 'out' : 1, 'noAck' : 2, 'slowAck' : 3, 'notification' : 7, 'batteryReport' : 8 }
-		map = nodeStatsMap
+		#map = nodeStatsMap
 						
 		if not self.keepStats:
 			self.extDebug(u'Not updating node statistics, disabled in plugin config')
@@ -599,11 +631,11 @@ class Plugin(indigo.PluginBase):
 				
 		if 'ackTime' in statProps and 'out' in updateStats:
 			# min ack time
-			if statProps['ackTime'] < self.nodeStats[nodeIdStr][4] or self.nodeStats[nodeIdStr][4] == 0: self.nodeStats[nodeIdStr][4] = statProps['ackTime']
+			if statProps['ackTime'] < self.nodeStats[nodeIdStr][5] or self.nodeStats[nodeIdStr][5] == 0: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
 			#max ack time
-			if statProps['ackTime'] > self.nodeStats[nodeIdStr][5]: self.nodeStats[nodeIdStr][5] = statProps['ackTime']
+			if statProps['ackTime'] > self.nodeStats[nodeIdStr][6]: self.nodeStats[nodeIdStr][6] = statProps['ackTime']
 			#acg ack time, possibly FIX, slightly inaccurate
-			self.nodeStats[nodeIdStr][6] = ((float(self.nodeStats[nodeIdStr][1]) * self.nodeStats[nodeIdStr][6]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
+			self.nodeStats[nodeIdStr][7] = ((float(self.nodeStats[nodeIdStr][1]) * self.nodeStats[nodeIdStr][7]) + statProps['ackTime']) / (self.nodeStats[nodeIdStr][1] + 1)
 					
 			# FIX; remove once tested
 			if not nodeIdStr in self.totalAck:
@@ -612,8 +644,8 @@ class Plugin(indigo.PluginBase):
 			self.logger.warn(u'nodeId: %s, ackTime: %d, out: %d, total ackTime: %d' % 	(nodeIdStr, statProps['ackTime'], self.nodeStats[nodeIdStr][1]+1, self.totalAck[nodeIdStr]))
 		for stat in updateStats:
 			#self.extDebug(u'stat prop: %s' % stat)
-			if stat in map:
-				self.nodeStats[nodeIdStr][map[stat]] += 1
+			if stat in nodeStatsMap:
+				self.nodeStats[nodeIdStr][nodeStatsMap[stat]] += 1
 			
 					
 				
@@ -625,7 +657,10 @@ class Plugin(indigo.PluginBase):
 		
 		self.triggers[trigger.id] = trigger
 		
-		if not self.subscribedOutgoing and self.checkOutgoingTriggers():
+		# FIX, consider some logic for less need for check
+		self.outgoingTriggers = self.checkOutgoingTriggers()
+		
+		if not self.subscribedOutgoing and self.outgoingTriggers:
 			self.logger.info(u'Subscribing to outgoing Z-wave commands, as there are now triggers for outgoing commands')
 			self.subscribedOutgoing = True
 			indigo.zwave.subscribeToOutgoing()
@@ -644,7 +679,9 @@ class Plugin(indigo.PluginBase):
 			except:
 				self.logger.error(u'Could not remove trigger from plugin list of triggers')
 				
-		if trigger.pluginTypeId == u'zOut' and self.subscribedOutgoing and not self.checkOutgoingTriggers():
+		self.outgoingTriggers = self.checkOutgoingTriggers()
+				
+		if trigger.pluginTypeId == u'zOut' and self.subscribedOutgoing and not self.outgoingTriggers:
 			pass
 			# Passing for now; Don't think there's a way to know if the trigger is being restarted. Will cause false info in case of trigger restart. possibly use didComm.. method.
 			#self.logger.info(u'Already subscribed to outgoing Z-wave commands, as there are now no triggers for outgoing commands this could be stopped.\nAs there is no way to unsubscribe from commands, plugin could with benefit be restarted to reduce load')
@@ -870,7 +907,68 @@ class Plugin(indigo.PluginBase):
 		self.logger.debug(u'Checking if there are triggers for outgoing z-wave commands: Not found')
 		return False
 				
-				
+	#####
+	# Check for dependant plugins, if they are enabled and correct version is installed etc.
+	#
+	def checkDependantPlugins(self):
+		
+		self.logger.debug(u'Checking status of other plugins this plugin depends on')
+		
+		# [<plugin pref for enable of plugin>, <plugin id>, <Friendly name>, <min plugin version>]
+		pluginList = [
+			[u'plugin-betteremail', u'com.flyingdiver.indigoplugin.betteremail', u'Better E-mail', u'7.0.2']
+			]
+			
+		for plug in pluginList:
+			
+			usePlugin = self.pluginPrefs.get(plug[0], False)
+			
+			self.logger.debug(u'Checking plugin "%s"' % plug[2])
+		
+			try:
+				if not usePlugin:
+					raise
+				try:
+					indigoPlug = indigo.server.getPlugin(plug[1])
+					if not indigoPlug.isEnabled():
+						raise ImportError(u'Plugin "%s" is not enabled, please install/enable, and re-enable in ZEAL plugin preferences' % plug[2])
+					if len(indigoPlug.pluginVersion) == 0 or indigoPlug.pluginVersion < plug[3]:
+						raise ImportError(u'Plugin "%s" version %s is less than ZEAL requires, please update the plugin. Use of this plugin in ZEAL has been disabled' % (plug[2], indigoPlug.pluginVersion))
+						
+					# Plugin specific checks:
+					if plug[1] == u'com.flyingdiver.indigoplugin.betteremail':
+						smtpDevId = self.pluginPrefs.get(u'plugin-betteremail-smtpdevice', u'')
+						if len(smtpDevId) == 0:
+							raise ImportError(u'You need to specify a valid "%s" SMTP device in ZEAL plugin preferences' % plug[2])
+						else:
+							try:
+								smtpDev = indigo.devices[int(smtpDevId)]
+								if not smtpDev.enabled:
+									raise
+							except:
+								raise ImportError(u'The specified "%s" SMTP device could not be loaded, please check\nZEAL plugin preferences and that the SMTP device is enabled')					
+				except ImportError as e:
+					self.logger.error(e)
+					raise
+				except:
+					self.logger.error(u'Could not load plugin "%s". Please install and re-enable in ZEAL plugin preferences' % plug[2])
+					raise
+			except:
+				# Common code for disabling use of the plugin
+				if usePlugin: # configured to use plugin, so some error happened
+					self.logger.debug(u'Disabling use of plugin "%s" in plugin prefs' % plug[2])
+					if len(indigoPlug.pluginSupportURL) > 0:
+						self.logger.info(u'"%s" support/install link: %s' % (plug[2], indigoPlug.pluginSupportURL))
+				else:
+					self.logger.debug(u'Not configured to use plugin "%s"' % plug[2])
+				self.pluginPrefs[plug[0]] = False
+				if plug[1] in self.dependantPlugins:
+					del self.dependantPlugins[plug[1]]
+			else:
+				# Plugin is successfully initialized, add to dict of enabled plugins
+				self.logger.debug(u'Plugin "%s" successfully checked' % plug[2])
+				self.dependantPlugins[plug[1]] = indigoPlug
+
 		
 	########################################
 	# Actions
@@ -952,44 +1050,154 @@ class Plugin(indigo.PluginBase):
 		
 		return True
 
-	# Print z-wave node statistics to log
-	def printNodeStatsToLog(self, action = None):
+	# Print z-wave node statistics to log or e-mail
+	def printNodeStatsToLogEmail(self, action = None):
+	
+		self.logger.debug(u'Outputting Z-wave node statistics to indigo log and/or e-mail')
+	
+		if not self.keepStats:
+			self.logger.error(u'Plugin is not configured to keep z-wave node statistics, check plugin preferences')
+			return
+		else:
 		
-		headers, statData = self.getNodeStats()
-		statData = sorted(statData, key=itemgetter(1))
+			if action is not None:
+			
+				self.logger.debug(u'Called by action')
+			
+				props = action.props
 		
-		self.logger.info(u'\n' + tabulate.tabulate(statData, headers=headers, floatfmt='.0f'))
-		# 		table = Texttable()
-		# 		table.header(headers)
-		# 		table.add_rows(statData, header=False)
-		# 		table.set_cols_width([4,30,9,5,13,13,10,10,13,7,7])
-		# 		table.set_deco(Texttable.BORDER | Texttable.HEADER)
-		# 		table.set_precision(0)
-		# 		self.logger.info(u'\n' + table.draw())
+				if props[u'includeFor'] == u'all':
+					devList = None
+				elif props[u'includeFor'] == u'selected':
+					devList = [indigo.devices[int(d)].id for d in props[u'devices']]
+				elif props[u'includeFor'] == u'excludeSelected':
+					excludeNodeList = [indigo.devices[int(d)].address for d in props[u'devices']]
+					devList = [d.id for d in indigo.devices.iter('indigo.zwave') if d.address not in excludeNodeList]
+					#devList = [d.id for d in indigo.devices.iter('indigo.zwave') if unicode(d.id) not in props[u'devices']]
+					
+				if props[u'includedColumns'] == u'all':
+					columnOrder = ['node', 'device'] + [d[0] for d in sorted(nodeStatsConf, key=itemgetter(2))]
+					headings = None
+				else:
+					columnOrder = list()
+					headings = list()
+					if u'node' in props[u'columns']:
+						columnOrder.append('node')
+						headings.append('Node')
+					if u'device' in props[u'columns']:
+						columnOrder.append('device')
+						headings.append('Device')
+												
+					for prop in sorted(nodeStatsConf, key=itemgetter(2)):
+						if prop[0] in props[u'columns']:
+							columnOrder.append(prop[0])
+							headings.append(prop[1])
 
-	def getNodeStats(self, deviceList = None, columnOrder = None, headers = None):
+				orderByColumn = 1
+				for i, c in enumerate(columnOrder):
+					if c == props.get(u'orderBy', u''):
+						orderByColumn = i
+							
+				defaultValue = props.get(u'defValue', u'-')
+				email = props.get(u'email', False)
+				log = props.get(u'indigoLog', True)
+					
+			else:
+				self.logger.debug(u'Called by menu item')
+				devList = None
+				columnOrder = None
+				headings = None
+				defaultValue = u'-'
+				log = True
+				email = False
+				orderByColumn = 1
+				
+			headers, statData = self.getNodeStats(deviceList=devList, columnOrder=columnOrder, headers=headings)
+			if len(statData) > 0:
+				self.logger.debug(u'Found z-wave node statistics, outputting...')
+				statData = sorted(statData, key=itemgetter(orderByColumn))
+				#output = tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue)
+				
+				if log:
+					self.logger.info(u'\n' + tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue))
+					
+				if email:
+				
+					emailAdr = self.substitute(props.get(u'emailAddress', u''))
+					emailSubject = self.substitute(props.get(u'emailSubject', u'Indigo ZEAL Z-wave node statistics'))
+					emailBody = self.substitute(props.get(u'emailBody', u''))
+				
+					if u'com.flyingdiver.indigoplugin.betteremail' in self.dependantPlugins:
+						# Sending with Better E-mail plugin, using HTML format
+						
+						if len(emailBody) > 0:
+							emailBody = u'\n<p>' + emailBody + u'</p>\n'
+						emailMessage = \
+							u'<html>\n<body>\n' + emailBody + \
+							tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue, tablefmt='html') + \
+							u'\n</body>\n</html>'
+						
+						self.dependantPlugins[u'com.flyingdiver.indigoplugin.betteremail'].executeAction(u'sendEmail',
+							deviceId=int(self.pluginPrefs.get(u'plugin-betteremail-smtpdevice', 0)),
+							props={
+								u'emailFormat' 		: u'html',
+								u'emailTo'			: emailAdr,
+								u'emailSubject'		: emailSubject,
+								u'emailMessage'		: emailMessage })
+								
+					
+					else:
+						# Not using Better E-mail, use plain text with Indigo
+						emailMessage = emailBody + u'\n\n' + \
+							tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue, tablefmt='plain')
+						indigo.server.sendEmailTo(emailAdr, subject=emailSubject, body=emailMessage)
+
+			else:
+				self.logger.info(u'No statistics has been gathered yet')
+
+	def getNodeStats(self, deviceList = None, columnOrder = None, headers = None, defValue=None):
 	
 		##self.nodeStats	 nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
 		
 		if headers is None:
 			#headers = [u'Node', u'Device', u'Num Cmds:\nIn', u'Out', u'Notifications', u'Batt.reports', u'Number of:\nNo Ack.', u'Slow Ack', u'AckTime (ms):\nMin', u'Max', u'Avg']
-			headers = [u'Node', u'Device', u'In', u'Out', u'Notif.', u'Batt.', u'No Ack', u'Slow Ack', u'Ack min.', u'Ack max', u'Ack avg']
+			#headers = [u'Node', u'Device', u'In', u'Out', u'Notif.', u'Batt.', u'No Ack', u'Slow Ack', u'Ack min.', u'Ack max', u'Ack avg']
+			headers = [u'Node', u'Device']
+			for c in sorted(nodeStatsConf, key=itemgetter(2)):
+				headers.append(c[1])
 			
-	
-		defValue = u' '
+		#if defValue is None:
+		#	defValue = u'-'
 		
+		# get a list of "columns", with prop id, 'in', 'out', etc.
 		if columnOrder is None:
-			columnOrder = [0,1,7,8,2,3,4,5,6]
+			columnOrder = ['node', 'device'] + [d[0] for d in sorted(nodeStatsConf, key=itemgetter(2))]
+			
+		# Get a list with list index in self.nodeStats, to iterate over
+		columnIter = list()
+		for prop in columnOrder:
+			if prop in ['node', 'device']:
+				columnIter.append(prop)
+				continue
+			for x, e in enumerate(nodeStatsConf):
+				if e[0] == prop:
+					columnIter.append(x)
+					break
 			
 		if deviceList is None:
 			nodeIter = [n for n in self.zNodes]
+		else:
+			nodeIter = list()
+			for n in self.zNodes:
+				for e in self.zNodes[n]:
+					if self.zNodes[n][e].id in deviceList:
+						nodeIter.append(n)
+						break
+						
+		self.extDebug(u'nodeIter: %s' % unicode(nodeIter))
 		
 		stats = list()
 		
-		#for header in headers:
-		#	stats[header] = list()
-		
-			
 		iterEndpoint = [None,1,2,3,4,5,6,7,8,9,10]
 		
 		for nodeId in nodeIter: #nodeId is unicode
@@ -1006,15 +1214,21 @@ class Plugin(indigo.PluginBase):
 			else:
 				break # Skip the node if it is not found in self.zNodes
 			
-			rowList.append(nodeId)
-			rowList.append(dev.name)
+			for i in columnIter: # i = index of self.nodeStats
 			
-			for i in columnOrder: # stat key, index
-				#self.logger.debug(s)
-				#self.logger.debug(i)
+				if i == 'node':
+					try:
+						rowList.append(int(nodeId))
+					except:
+						rowList.append(nodeId)
+					continue
+				elif i == 'device':
+					rowList.append(dev.name)
+					continue
+				
 				value = self.nodeStats[nodeId][i]
-				#if value == 0:
-				#	value = defValue
+				if value == 0:
+					value = defValue
 				rowList.append(value)
 				
 			stats.append(rowList)
@@ -1050,7 +1264,7 @@ class Plugin(indigo.PluginBase):
 		elif filter in [u'alarmTypesInclude', u'eventsInclude', u'eventsExclude', u'x80resetDeviceList']:
 			myArray = [
 				(u"all",u"All")]
-		elif filter in [u'alarmTypesExclude', u'zDeviceList']:
+		elif filter in [u'alarmTypesExclude', u'zDeviceList', u'nodeStatsColumns', u'nodeStatsColumnsOrder']:
 			myArray = list()
 			
 		tmpArray = list()
@@ -1127,7 +1341,13 @@ class Plugin(indigo.PluginBase):
 						dev = self.zNodes[node][endpoint]
 						devArray.append( (dev.id, dev.name) )
 						break # Only include devices with "lowest" endpoint
-			myArray = sorted (devArray, key = operator.itemgetter(1))		
+			myArray = sorted (devArray, key = operator.itemgetter(1))	
+				
+		elif filter in  [u'nodeStatsColumnsOrder', u'nodeStatsColumns']:
+			myArray.append( (u'node', u'Node Id') )
+			myArray.append( (u'device', u'Device Name') )
+			for prop in nodeStatsConf:
+				myArray.append( (prop[0], prop[1]) )
 			
 
 		
@@ -1136,7 +1356,7 @@ class Plugin(indigo.PluginBase):
 					
 		self.extDebug(u'myArray: %s' % unicode(valuesDict))
 
-		return myArray	
+		return myArray
 	
 	def x71receivedIncludeFilterChangedFilterSelection(self, valuesDict=None, typeId="", targetId=0):
 		valuesDict = self.selectedFilterChanged(u'includeFilter', valuesDict, typeId, targetId)
@@ -1363,6 +1583,9 @@ class Plugin(indigo.PluginBase):
 		# FIX, device list won't update without this function, don't understand quite why
 		return valuesDict
 
+	###############################
+	# printNodeStatsToLogOrEmail
+	###############################
 
 	########################################
 	# UI VALIDATION

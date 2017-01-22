@@ -13,10 +13,18 @@
 	</MenuItem>
 	<MenuItem id="printNodeStatsToLog">
 		<Name>Output Z-wave node statistics to Indigo log</Name>
-		<CallbackMethod>printNodeStatsToLog</CallbackMethod>
+		<CallbackMethod>printNodeStatsToLogEmail</CallbackMethod>
 	</MenuItem>
 	<MenuItem id="resetNodeStats">
-		<Name>RESET ALL Z-wave node statistics</Name>
-		<CallbackMethod>resetNodeStats</CallbackMethod>
+		<Name>RESET ALL Z-wave node statistics...</Name>
+		<ConfigUI>
+			<Field id="resetNodeStatsLabel" type="label">
+				<Label>Pressing the button will reset all Z-wave node statistics</Label>
+			</Field>
+        	<Field id="resetNodeStats" type="button" tooltip="Will reset all Z-wave node statistics">
+				<Title>Reset statistics</Title>
+				<CallbackMethod>resetNodeStats</CallbackMethod>
+			</Field>
+		</ConfigUI>
 	</MenuItem>
 </MenuItems>

@@ -30,6 +30,27 @@
 		<Label>Will result in some increased load for plugin</Label>
 	</Field>
 	
+	<!-- Other plugin dependencies -->
+	
+	<Field type="label" id="emptylabelPlugin">
+		<Label>
+		</Label>
+	</Field>
+	<Field type="label" id="otherPluginsHeading" fontColor="blue" fontSize="large">
+		<Label>Use of other plugins:</Label>
+	</Field>
+	<Field type="separator" id="separatorPlugins"/>
+	<Field type="checkbox" id="plugin-betteremail" defaultValue="false">
+		<Label>Better E-mail:</Label>
+	</Field>
+	<Field type="menu" id="plugin-betteremail-smtpdevice" visibleBindingId="plugin-betteremail" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+		<Label>SMTP account:</Label>
+		<List class="indigo.devices" filter="com.flyingdiver.indigoplugin.betteremail.smtpAccount"/>
+	</Field>
+	<Field type="label" id="otherPluginsLabel" fontSize="small" fontColor="darkgray" alignWithControl="true">
+		<Label>Use Better E-mail plugin for sending e-mails. Will for example enable use of formatted HTML e-mails</Label>
+	</Field>
+	
 	<!-- VARIABLES -->
 	
 	<Field type="label" id="emptylabel1">

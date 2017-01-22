@@ -34,7 +34,7 @@ Use this dialog to add, edit or delete  filters for certain alarms/notifications
 Inclusion filters</Label>
         	</Field>
         	<Field id="separator2" type="separator"/>
-        	<Field type="menu" id="selectedIncludeFilter" default="_blank">
+        	<Field type="menu" id="selectedIncludeFilter" defaultValue="_blank">
         		<Label>Select 
 Filter:</Label>
         		<List class="self" filter="includeFilters" method="getUIList" dynamicReload="true"/>
@@ -43,23 +43,23 @@ Filter:</Label>
         	<Field type="textfield" id="includeFilterName">
         		<Label>Filter Name:</Label>
         	</Field>
-        	<Field type="menu" id="includeFilterType" default="all">
+        	<Field type="menu" id="includeFilterType" defaultValue="all">
         		<Label>Alarm/
 notification types:</Label>
         		<List class="self" filter="alarmTypesInclude" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedIncludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
-        	<Field type="list" id="includeFilterEvents" default="all" rows="6">
+        	<Field type="list" id="includeFilterEvents" defaultValue="all" rows="6">
         		<Label>Events:</Label>
         		<List class="self" filter="eventsInclude" method="getUIList" dynamicReload="true"/>
 				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
         	</Field>
-        	<Field type="textfield" id="includeFilterStatus" default="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+        	<Field type="textfield" id="includeFilterStatus" defaultValue="" readonly="true" visibleBindingId="showIncludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
         		<Label>Save/edit status:
 
 </Label>
 			</Field>
-        	<Field type="checkbox" id="showIncludeFilterStatus" default="False" hidden="true">
+        	<Field type="checkbox" id="showIncludeFilterStatus" defaultValue="False" hidden="true">
         	</Field>
         	<Field id="saveIncludeFilter" type="button" tooltip="Save the filter">
 				<Title>Save</Title>
@@ -77,7 +77,7 @@ notification types:</Label>
 Exclusion filters</Label>
         	</Field>
         	<Field id="separator3" type="separator"/>
-        	<Field type="menu" id="selectedExcludeFilter" default="_blank">
+        	<Field type="menu" id="selectedExcludeFilter" defaultValue="_blank">
         		<Label>Select 
 Filter:</Label>
         		<List class="self" filter="excludeFilters" method="getUIList" dynamicReload="true"/>
@@ -86,23 +86,23 @@ Filter:</Label>
         	<Field type="textfield" id="excludeFilterName">
         		<Label>Filter Name:</Label>
         	</Field>
-        	<Field type="menu" id="excludeFilterType" default="all">
+        	<Field type="menu" id="excludeFilterType" defaultValue="all">
         		<Label>Alarm/
 notification types:</Label>
         		<List class="self" filter="alarmTypesExclude" method="getUIList" dynamicReload="true"/>
 				<CallbackMethod>x71receivedExcludeFilterChangedTypeSelection</CallbackMethod>
         	</Field>
-        	<Field type="list" id="excludeFilterEvents" default="all" rows="6">
+        	<Field type="list" id="excludeFilterEvents" defaultValue="all" rows="6">
         		<Label>Events:</Label>
         		<List class="self" filter="eventsExclude" method="getUIList" dynamicReload="true"/>
 				<!--<CallbackMethod>selectedTriggerFilterChangedEventSelection</CallbackMethod>-->
         	</Field>
-        	<Field type="textfield" id="excludeFilterStatus" default="" readonly="true" visibleBindingId="showExcludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
+        	<Field type="textfield" id="excludeFilterStatus" defaultValue="" readonly="true" visibleBindingId="showExcludeFilterStatus" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
         		<Label>Save/edit status:
 
 </Label>
 			</Field>
-        	<Field type="checkbox" id="showExcludeFilterStatus" default="False" hidden="true">
+        	<Field type="checkbox" id="showExcludeFilterStatus" defaultValue="False" hidden="true">
         	</Field>
         	<Field id="saveExcludeFilter" type="button" tooltip="Save the filter">
 				<Title>Save</Title>
@@ -138,7 +138,7 @@ notification types:</Label>
 Trigger on</Label>
         	</Field>
         	<Field id="separator1" type="separator"/>
-        	<Field type="checkbox" id="triggerLowBatteryReport" default="true">
+        	<Field type="checkbox" id="triggerLowBatteryReport" defaultValue="true">
         		<Label>Low battery report:</Label>
         	</Field>
 			<!--<Field type="menu" id="lowBatteryResetOn" defaultValue="levelAbove" visibleBindingId="triggerLowBatteryReport" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
@@ -163,7 +163,7 @@ Trigger on</Label>
         		<Label>
         		</Label>
         	</Field>
-        	<Field type="checkbox" id="triggerBatteryLevel" default="true">
+        	<Field type="checkbox" id="triggerBatteryLevel" defaultValue="true">
         		<Label>Battery level:</Label>
 			</Field>
 			<Field type="textfield" id="batteryLevel" defaultValue="10" visibleBindingId="triggerBatteryLevel" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
@@ -226,14 +226,14 @@ and re-enable:</Label>
 Trigger on</Label>
         	</Field>
         	<Field id="separator1" type="separator"/>
-        	<Field type="checkbox" id="triggerNoAck" default="true">
+        	<Field type="checkbox" id="triggerNoAck" defaultValue="true">
         		<Label>No ack from device:</Label>
         	</Field>
         	<Field type="label" id="emptylabel1">
         		<Label>
         		</Label>
         	</Field>
-        	<Field type="checkbox" id="triggerSlowAck" default="true">
+        	<Field type="checkbox" id="triggerSlowAck" defaultValue="true">
         		<Label>Slow response:</Label>
 			</Field>
 			<Field type="textfield" id="ackTime" defaultValue="300" visibleBindingId="triggerSlowAck" visibleBindingValue="true" alwaysUseInDialogHeightCalc="true">
