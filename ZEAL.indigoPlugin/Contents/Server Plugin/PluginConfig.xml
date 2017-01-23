@@ -12,6 +12,22 @@
 	<Field type="checkbox" id="extensiveDebug" defaultValue="False">
 		<Label>Extensive debug log</Label>
 	</Field>
+	<Field type="label" id="emptylabelUpdates">
+		<Label>
+		</Label>
+	</Field>
+	<Field type="textfield" id="checkForUpdatesInterval" defaultValue="24">
+		<Label>Check for updates every:</Label>
+	</Field>
+	<Field type="label" id="updatesLabel" fontSize="small" fontColor="darkgray" alignWithControl="true">
+		<Label>Hours. 0 to only check on startup, blank to disable</Label>
+	</Field>
+	<Field type="checkbox" id="autoUpdate" defaultValue="false">
+		<Label>Automatically update:</Label>
+	</Field>
+	<Field type="textfield" id="checkForUpdatesEmail" defaultValue="">
+		<Label>Notify to e-mail:</Label>
+	</Field>
 	
 	<!-- Z-wave node stats -->
 	

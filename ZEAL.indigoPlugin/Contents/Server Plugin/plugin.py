@@ -15,6 +15,7 @@ from collections import defaultdict
 from tabulate import tabulate
 #from texttable.texttable import Texttable
 from operator import itemgetter
+from ghpu import GitHubPluginUpdater
 
 # Note the "indigo" module is automatically imported and made available inside
 # our global name space by the host process.
@@ -125,6 +126,7 @@ class Plugin(indigo.PluginBase):
 	########################################
 	def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
 		super(Plugin, self).__init__(pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
+		#indigo.PluginBase.__init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
 
 		self.errorState = False
 
@@ -135,6 +137,7 @@ class Plugin(indigo.PluginBase):
 		self.zNodes = {} # Map of zwave nodes to indigo devices
 		self.dependantPlugins = dict() # Plugins that this plugin relies on
 		self.outgoingTriggers = False # Wheter or not there are triggers for outgoing triggers
+		self.pluginName = u'ZEAL'
 			
 		# Set plugin preferences
 		self.setUpdatePluginPrefs()
@@ -149,7 +152,6 @@ class Plugin(indigo.PluginBase):
 		self.getZwaveNodeDevMap()
 		#self.logger.debug(self.zNodes)
 		
-		# map z-wave nodes and commands to indigo triggers
 		
 	########################################
 	def __del__(self):
@@ -170,6 +172,11 @@ class Plugin(indigo.PluginBase):
 		else:
 			self.logger.debug(u'Not subscribing to outgoing Z-wave commands, as there are no triggers for outgoing')
 		# FIX, don't know if it's possible to unsubscribe from outgoing z-wave commands if already subscribed
+		
+		self.logger.debug(u'Getting plugin updater')
+		
+		# get plugin updater indigo-ghpu
+		self.updater = GitHubPluginUpdater(self)
 		
 	########################################
 	def shutdown(self):
@@ -217,6 +224,21 @@ class Plugin(indigo.PluginBase):
 		# ERROR		: Errors not critical for plugin execution
 		# CRITICAL	: Errors critical for plugin execution, plugin will stop
 		
+		self.checkForUpdatesInterval = self.pluginPrefs.get(u'checkForUpdatesInterval', 24)
+		if self.checkForUpdatesInterval == u'':
+			self.checkForUpdates = False
+		else:
+			self.checkForUpdates = True
+			try:
+				self.checkForUpdatesInterval = int(self.checkForUpdatesInterval)
+			except:
+				self.logger.error(u'Invalid plugin prefs value for update check frequency, defaulting to 24 hours')
+				self.checkForUpdatesInterval = 24
+				
+			self.checkForUpdatesEmail = self.pluginPrefs.get(u'checkForUpdatesEmail', '')
+		
+		self.autoUpdate = self.pluginPrefs.get(u'autoUpdate', False)
+		
 		self.keepStats = self.pluginPrefs.get(u'keepStats', False)
 		if self.keepStats:
 			self.nodeStats = self.load(self.pluginPrefs.get(u'nodeStats', self.store(dict()))) # see def emptyNodeStatList() for description
@@ -258,12 +280,32 @@ class Plugin(indigo.PluginBase):
 					# Checking for outgoing triggers
 					self.outgoingTriggers = self.checkOutgoingTriggers()
 					
+				# Check for updates
+				if self.checkForUpdates:
+					if counter == 0 or (self.checkForUpdatesInterval > 0 and 
+					 self.checkForUpdatesInterval % counter == 0):
+						
+						self.logger.debug(u'Checking for plugin updates')
+						updateAvailable = self.updater.checkForUpdate()
+						
+						if updateAvailable:
+							
+							if len(self.checkForUpdatesEmail) > 0:
+								self.logger.debug(u'Notifying that new plugin version is available via e-mail')
+								indigo.server.sendEmailTo(self.checkForUpdatesEmail, 
+									subject=u'Indigo %s plugin update available' % (self.pluginName), 
+									body=u'A new update of %s plugin is available and can be updated from the plugin menu within Indigo' % (self.pluginName))
+									
+							if self.autoUpdate:
+								# FIX
+								pass
+					
 				counter += 1
-				self.sleep(3600)
+				self.sleep(3613)
 		except self.StopThread:
 			self.logger.debug(u'runConcurrentThread self.StopThread')
 			if self.keepStats:
-				self.logger.debug(u'Periodically saving z-wave node statistics')
+				self.logger.debug(u'Saving z-wave node statistics before quitting plugin')
 				self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
 		# 		if self.errorState:
 		# 			# FIX, find some way to shutdown if there are errors
@@ -931,27 +973,27 @@ class Plugin(indigo.PluginBase):
 				try:
 					indigoPlug = indigo.server.getPlugin(plug[1])
 					if not indigoPlug.isEnabled():
-						raise ImportError(u'Plugin "%s" is not enabled, please install/enable, and re-enable in ZEAL plugin preferences' % plug[2])
+						raise ImportError(u'Plugin "%s" is not enabled, please install/enable, and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
 					if len(indigoPlug.pluginVersion) == 0 or indigoPlug.pluginVersion < plug[3]:
-						raise ImportError(u'Plugin "%s" version %s is less than ZEAL requires (%s), please update the plugin.\nUse of this plugin in ZEAL has been disabled' % (plug[2], indigoPlug.pluginVersion, plug[3]))
+						raise ImportError(u'Plugin "%s" version %s is less than %s requires (%s), please update the plugin.\nUse of this plugin in %s has been disabled' % (plug[2], indigoPlug.pluginVersion, self.pluginName, plug[3], self.pluginName))
 						
 					# Plugin specific checks:
 					if plug[1] == u'com.flyingdiver.indigoplugin.betteremail':
 						smtpDevId = self.pluginPrefs.get(u'plugin-betteremail-smtpdevice', u'')
 						if len(smtpDevId) == 0:
-							raise ImportError(u'You need to specify a valid "%s" SMTP device in ZEAL plugin preferences' % plug[2])
+							raise ImportError(u'You need to specify a valid "%s" SMTP device in %s plugin preferences' % plug[2], self.pluginName)
 						else:
 							try:
 								smtpDev = indigo.devices[int(smtpDevId)]
 								if not smtpDev.enabled:
 									raise
 							except:
-								raise ImportError(u'The specified "%s" SMTP device could not be loaded, please check\nZEAL plugin preferences and that the SMTP device is enabled')					
+								raise ImportError(u'The specified "%s" SMTP device could not be loaded, please check\n%s plugin preferences and that the SMTP device is enabled' % (self.pluginName))					
 				except ImportError as e:
 					self.logger.error(e)
 					raise
 				except:
-					self.logger.error(u'Could not load plugin "%s". Please install and re-enable in ZEAL plugin preferences' % plug[2])
+					self.logger.error(u'Could not load plugin "%s". Please install and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
 					raise
 			except:
 				# Common code for disabling use of the plugin
@@ -1123,7 +1165,7 @@ class Plugin(indigo.PluginBase):
 				if email:
 				
 					emailAdr = self.substitute(props.get(u'emailAddress', u''))
-					emailSubject = self.substitute(props.get(u'emailSubject', u'Indigo ZEAL Z-wave node statistics'))
+					emailSubject = self.substitute(props.get(u'emailSubject', u'Indigo %s Z-wave node statistics' % (self.pluginName)))
 					emailBody = self.substitute(props.get(u'emailBody', u''))
 				
 					if u'com.flyingdiver.indigoplugin.betteremail' in self.dependantPlugins:
@@ -1154,7 +1196,7 @@ class Plugin(indigo.PluginBase):
 			else:
 				self.logger.info(u'No statistics has been gathered yet')
 
-	def getNodeStats(self, deviceList = None, columnOrder = None, headers = None, defValue=None):
+	def getNodeStats(self, deviceList = None, columnOrder = None, headers = None, defValue=None, includeNoStats=True):
 	
 		##self.nodeStats	 nodeId<str> : [numIn, numOut, numNoAck, numSlowAckTriggers, minAckTime, maxAckTime, avgAckTime, numNotifications, numBatteryReports]
 		
@@ -1202,9 +1244,13 @@ class Plugin(indigo.PluginBase):
 		for nodeId in nodeIter: #nodeId is unicode
 		
 			rowList = list()
-						
+			
+			noStats = False
 			if nodeId not in self.nodeStats:
-				continue 
+				if not includeNoStats:
+					continue
+				else:
+					noStats = True
 			
 			for endpoint in iterEndpoint:
 				if endpoint in self.zNodes[nodeId]:
@@ -1225,9 +1271,12 @@ class Plugin(indigo.PluginBase):
 					rowList.append(dev.name)
 					continue
 				
-				value = self.nodeStats[nodeId][i]
-				if value == 0:
+				if noStats:
 					value = defValue
+				else:
+					value = self.nodeStats[nodeId][i]
+					if value == 0:
+						value = defValue
 				rowList.append(value)
 				
 			stats.append(rowList)
@@ -1605,9 +1654,20 @@ class Plugin(indigo.PluginBase):
 						var = indigo.variables[int(valuesDict.get(varPref + u'Variable'))]
 					except:
 						errorDict[varPref + u'Variable'] = u'Invalid variable selected'
-						
+		
+		if valuesDict[u'checkForUpdatesInterval'] != u'':
+			try:
+				checkInterval = int(valuesDict[u'checkForUpdatesInterval'])
+				if checkInterval < 0:
+					errorDict[u'checkForUpdatesInterval'] = u'Please specify a positive integer'	
+			except:
+				errorDict[u'checkForUpdatesInterval'] = u'Please specify a valid integer'
+				
+			if len(valuesDict[u'checkForUpdatesEmail']) and not self.validateEmail(valuesDict[u'checkForUpdatesEmail']):
+				errorDict[u'checkForUpdatesEmail'] = u'Invalied e-mail address specified'
 			
 		if len(errorDict) > 0:
+			errorDict[u'showAlertText'] = '\n'.join(set([value for value in errorDict.values()]))
 			return (False, valuesDict, errorDict)
 		else:
 			return (True, valuesDict)
