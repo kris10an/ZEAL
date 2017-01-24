@@ -297,8 +297,8 @@ class Plugin(indigo.PluginBase):
 									body=u'A new update of %s plugin is available and can be updated from the plugin menu within Indigo' % (self.pluginName))
 									
 							if self.autoUpdate:
-								# FIX
-								pass
+								self.updatePlugin()
+								
 					
 				counter += 1
 				self.sleep(3613)
@@ -1288,7 +1288,11 @@ class Plugin(indigo.PluginBase):
 		self.logger.info(u'Resetting all Z-wave node statistics')
 		self.nodeStats = dict()
 		self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
-			
+		
+	def updatePlugin(self):
+		
+		self.logger.info(u'Initiating plugin update')
+		self.updater.update()
 
 	########################################
 	# UI List generators and callbackmethods
