@@ -11,11 +11,15 @@
 		<Name>Reset triggering on battery level...</Name>
 		<ConfigUI actionId="resetTriggerBatteryLevel"/>
 	</MenuItem>
+	<MenuItem id="dummyItem">
+		<Name>────────────────────────</Name>
+		<CallbackMethod>dummyCallback</CallbackMethod>
+	</MenuItem>
 	<MenuItem id="printNodeStatsToLog">
 		<Name>Output Z-wave node statistics to Indigo log</Name>
 		<CallbackMethod>printNodeStatsToLogEmail</CallbackMethod>
 	</MenuItem>
-	<MenuItem id="resetNodeStats">
+	<!--MenuItem id="resetNodeStats">
 		<Name>RESET ALL Z-wave node statistics...</Name>
 		<ConfigUI>
 			<Field id="resetNodeStatsLabel" type="label">
@@ -26,5 +30,27 @@
 				<CallbackMethod>resetNodeStats</CallbackMethod>
 			</Field>
 		</ConfigUI>
+	</MenuItem-->
+	<MenuItem id="resetNodeStats">
+		<Name>RESET ALL Z-wave node statistics...</Name>
+		<CallbackMethod>resetNodeStats</CallbackMethod>
+		<ButtonTitle>Reset</ButtonTitle>
+		<ConfigUI>
+			<Field id="resetNodeStatsLabel" type="label">
+				<Label>Pressing the button will reset all Z-wave node statistics</Label>
+			</Field>
+		</ConfigUI>
+	</MenuItem>
+	<MenuItem id="dummyItem2">
+		<Name>────────────────────────</Name>
+		<CallbackMethod>dummyCallback</CallbackMethod>
+	</MenuItem>
+	<MenuItem id="checkPluginUpdates">
+		<Name>Check for plugin updates</Name>
+		<CallbackMethod>checkPluginUpdates</CallbackMethod>
+	</MenuItem>
+	<MenuItem id="updatePlugin">
+		<Name>Update Plugin</Name>
+		<CallbackMethod>updatePlugin</CallbackMethod>
 	</MenuItem>
 </MenuItems>

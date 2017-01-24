@@ -237,7 +237,9 @@ class Plugin(indigo.PluginBase):
 				
 			self.checkForUpdatesEmail = self.pluginPrefs.get(u'checkForUpdatesEmail', '')
 		
-		self.autoUpdate = self.pluginPrefs.get(u'autoUpdate', False)
+		#self.autoUpdate = self.pluginPrefs.get(u'autoUpdate', False)
+		# FIX, Indigo will ask for confirmation before plugin is updates, so best to leave as manual menu option
+		self.autoUpdate = False
 		
 		self.keepStats = self.pluginPrefs.get(u'keepStats', False)
 		if self.keepStats:
@@ -284,21 +286,8 @@ class Plugin(indigo.PluginBase):
 				if self.checkForUpdates:
 					if counter == 0 or (self.checkForUpdatesInterval > 0 and 
 					 self.checkForUpdatesInterval % counter == 0):
-						
-						self.logger.debug(u'Checking for plugin updates')
-						updateAvailable = self.updater.checkForUpdate()
-						
-						if updateAvailable:
-							
-							if len(self.checkForUpdatesEmail) > 0:
-								self.logger.debug(u'Notifying that new plugin version is available via e-mail')
-								indigo.server.sendEmailTo(self.checkForUpdatesEmail, 
-									subject=u'Indigo %s plugin update available' % (self.pluginName), 
-									body=u'A new update of %s plugin is available and can be updated from the plugin menu within Indigo' % (self.pluginName))
-									
-							if self.autoUpdate:
-								self.updatePlugin()
-								
+					 
+					 self.checkPluginUpdates(notify=True, performUpdate=self.autoUpdate)								
 					
 				counter += 1
 				self.sleep(3613)
@@ -1153,6 +1142,8 @@ class Plugin(indigo.PluginBase):
 				email = False
 				orderByColumn = 1
 				
+			resetStr = u'Last statistics reset: ' + self.pluginPrefs.get(u'nodeStatsResetTime', u'Never')
+				
 			headers, statData = self.getNodeStats(deviceList=devList, columnOrder=columnOrder, headers=headings)
 			if len(statData) > 0:
 				self.logger.debug(u'Found z-wave node statistics, outputting...')
@@ -1160,7 +1151,7 @@ class Plugin(indigo.PluginBase):
 				#output = tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue)
 				
 				if log:
-					self.logger.info(u'\n' + tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue))
+					self.logger.info(u'\n' + tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue) + u'\n\n' + resetStr)
 					
 				if email:
 				
@@ -1176,6 +1167,7 @@ class Plugin(indigo.PluginBase):
 						emailMessage = \
 							u'<html>\n<body>\n' + emailBody + \
 							tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue, tablefmt='html') + \
+							u'\n<p>' + resetStr + u'</p>' \
 							u'\n</body>\n</html>'
 						
 						self.dependantPlugins[u'com.flyingdiver.indigoplugin.betteremail'].executeAction(u'sendEmail',
@@ -1190,7 +1182,8 @@ class Plugin(indigo.PluginBase):
 					else:
 						# Not using Better E-mail, use plain text with Indigo
 						emailMessage = emailBody + u'\n\n' + \
-							tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue, tablefmt='plain')
+							tabulate.tabulate(statData, headers=headers, floatfmt='.0f', missingval=defaultValue, tablefmt='plain') + u'\n\n' + \
+							resetStr
 						indigo.server.sendEmailTo(emailAdr, subject=emailSubject, body=emailMessage)
 
 			else:
@@ -1283,16 +1276,44 @@ class Plugin(indigo.PluginBase):
 				
 		return headers, stats
 		
-	def resetNodeStats(self, action = None):
+	def resetNodeStats(self, action = None, typeId = None):
 	
 		self.logger.info(u'Resetting all Z-wave node statistics')
-		self.nodeStats = dict()
-		self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+		try:
+			self.nodeStats = dict()
+			self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+			self.pluginPrefs[u'nodeStatsResetTime'] = timeToStr()
+			return True
+		except:
+			return False
 		
 	def updatePlugin(self):
 		
 		self.logger.info(u'Initiating plugin update')
-		self.updater.update()
+		updateResult = self.updater.update()
+		
+		return updateResult
+		
+	def checkPluginUpdates(self, notify = False, performUpdate = False):
+		
+		self.logger.debug(u'Checking for plugin updates')
+		updateAvailable = self.updater.checkForUpdate()
+		
+		if updateAvailable:
+			
+			if notify and len(self.checkForUpdatesEmail) > 0:
+				self.logger.debug(u'Notifying that new plugin version is available via e-mail')
+				indigo.server.sendEmailTo(self.checkForUpdatesEmail, 
+					subject=u'Indigo %s plugin update available' % (self.pluginName), 
+					body=u'A new update of %s plugin is available and can be updated from the plugin menu within Indigo' % (self.pluginName))
+					
+			if performUpdate:
+				self.updatePlugin()
+				
+		return updateAvailable
+		
+	def dummyCallback(self, action = None, typeId = None):
+		pass
 
 	########################################
 	# UI List generators and callbackmethods
