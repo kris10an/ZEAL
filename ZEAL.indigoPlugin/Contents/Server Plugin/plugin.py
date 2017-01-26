@@ -419,6 +419,7 @@ class Plugin(indigo.PluginBase):
 						raise
 						
 					# FIX, consider adding logging based on why event did not trigger
+					# FIX, reset logic for onTime
 
 					# trigger on low battery report
 					if triggerType == u'lowBattery' and props[u'triggerLowBatteryReport']: 
@@ -961,8 +962,8 @@ class Plugin(indigo.PluginBase):
 					raise
 				try:
 					indigoPlug = indigo.server.getPlugin(plug[1])
-					if not indigoPlug.isEnabled():
-						raise ImportError(u'Plugin "%s" is not enabled, please install/enable, and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
+					if not indigoPlug.isRunning():
+						raise ImportError(u'Plugin "%s" is not running, please install/enable, and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
 					if len(indigoPlug.pluginVersion) == 0 or indigoPlug.pluginVersion < plug[3]:
 						raise ImportError(u'Plugin "%s" version %s is less than %s requires (%s), please update the plugin.\nUse of this plugin in %s has been disabled' % (plug[2], indigoPlug.pluginVersion, self.pluginName, plug[3], self.pluginName))
 						
@@ -1312,9 +1313,6 @@ class Plugin(indigo.PluginBase):
 				
 		return updateAvailable
 		
-	def dummyCallback(self, action = None, typeId = None):
-		pass
-
 	########################################
 	# UI List generators and callbackmethods
 	########################################

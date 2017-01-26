@@ -104,4 +104,8 @@ Use Alt+Enter for "soft" line breaks in body, &lt;br&gt; for html line breaks</L
 			</Field>
 		</ConfigUI>
 	</Action>
+	<Action id="resetNodeStats">
+		<Name>Reset all Z-wave node statistics</Name>
+		<CallbackMethod>resetNodeStats</CallbackMethod>
+	</Action>
 </Actions>

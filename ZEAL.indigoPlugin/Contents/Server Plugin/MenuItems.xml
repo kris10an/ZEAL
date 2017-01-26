@@ -11,10 +11,7 @@
 		<Name>Reset triggering on battery level...</Name>
 		<ConfigUI actionId="resetTriggerBatteryLevel"/>
 	</MenuItem>
-	<MenuItem id="dummyItem">
-		<Name>────────────────────────</Name>
-		<CallbackMethod>dummyCallback</CallbackMethod>
-	</MenuItem>
+	<MenuItem id="separator2" />
 	<MenuItem id="printNodeStatsToLog">
 		<Name>Output Z-wave node statistics to Indigo log</Name>
 		<CallbackMethod>printNodeStatsToLogEmail</CallbackMethod>
@@ -41,10 +38,7 @@
 			</Field>
 		</ConfigUI>
 	</MenuItem>
-	<MenuItem id="dummyItem2">
-		<Name>────────────────────────</Name>
-		<CallbackMethod>dummyCallback</CallbackMethod>
-	</MenuItem>
+	<MenuItem id="separator" />
 	<MenuItem id="checkPluginUpdates">
 		<Name>Check for plugin updates</Name>
 		<CallbackMethod>checkPluginUpdates</CallbackMethod>
