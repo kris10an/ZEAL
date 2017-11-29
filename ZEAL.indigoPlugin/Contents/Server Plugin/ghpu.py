@@ -336,7 +336,8 @@ class GitHubPluginUpdater(object):
     # convenience method for error messages
     def _error(self, msg):
         if self.plugin:
-            self.plugin.errorLog(msg)
+            #self.plugin.errorLog(msg)
+            self.plugin.logger.warning(msg)
 
 ################################################################################
 # maps the standard version string as a tuple for comparrison

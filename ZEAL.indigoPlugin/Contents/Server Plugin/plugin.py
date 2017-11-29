@@ -67,6 +67,15 @@ for i, j in enumerate(nodeStatsConf):
 
 #nodeStatsHeaders = {u'node' : u'Node', u'device' : u'Device', u'Cmds: In', u'Out', u'Notifications', u'Batt.reports', u'# Ack triggers: Slow', u'No Ack', u'AckTime (ms): Min', u'Max', u'Avg'}
 
+# [<plugin pref for enable of plugin>, <plugin id>, <Friendly name>, <min plugin version>, <failed attempts>]
+pluginList = [
+	[u'plugin-betteremail', u'com.flyingdiver.indigoplugin.betteremail', u'Better E-mail', u'7.1.0', 0]
+	]
+	
+# https://stackoverflow.com/questions/9647202/ordinal-numbers-replacement
+ordinal = lambda n: "%d%s" % (n,"tsnrhtdd"[(n/10%10!=1)*(n%10<4)*n%10::4])
+
+
 ########################################
 # Tiny function to convert a list of integers (bytes in this case) to a
 # hexidecimal string for pretty logging.
@@ -252,7 +261,8 @@ class Plugin(indigo.PluginBase):
 					l = l[0:1] + [0] + l[2:]
 					
 		# Check plugin dependencies
-		self.checkDependantPlugins()
+		#self.checkDependantPlugins()
+		#Moved to runConcurrentThread
 					
 		
 		
@@ -267,30 +277,39 @@ class Plugin(indigo.PluginBase):
 		try:
 			counter = 0
 			while True:
-				self.logger.debug(u'runConcurrentThread')
+				self.extDebug(u'runConcurrentThread')
+		
+				# Runs every 1 hour, 9 seconds
+				if ((counter % 401) == 0): 
 				
-				if counter > 0: # Skip on first loop
-					self.getZwaveNodeDevMap()
+					if counter > 0: # Skip on first loop
+						self.getZwaveNodeDevMap()
 				
-					if self.keepStats:
-						self.logger.debug(u'Periodically saving z-wave node statistics')
-						self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
+						if self.keepStats:
+							self.logger.debug(u'Periodically saving z-wave node statistics')
+							self.pluginPrefs[u'nodeStats'] = self.store(self.nodeStats)
 						
-					# Check plugin dependencies
-					self.checkDependantPlugins()
+						# Check plugin dependencies
+						self.checkDependantPlugins()
 					
-					# Checking for outgoing triggers
-					self.outgoingTriggers = self.checkOutgoingTriggers()
-					
-				# Check for updates
-				if self.checkForUpdates:
-					if counter == 0 or (self.checkForUpdatesInterval > 0 and 
-					 self.checkForUpdatesInterval % counter == 0):
+						# Checking for outgoing triggers
+						self.outgoingTriggers = self.checkOutgoingTriggers()	
+										
+					# Check for updates
+					if self.checkForUpdates:
+						if counter == 0 or (self.checkForUpdatesInterval > 0 and 
+						 (counter % self.checkForUpdatesInterval) == 0):
 					 
-					 self.checkPluginUpdates(notify=True, performUpdate=self.autoUpdate)								
-					
+						 self.checkPluginUpdates(notify=True, performUpdate=self.autoUpdate)								
+									
+				#Runs 5 first times
+				if counter < 5: 
+					self.checkDependantPlugins()
+				
+				# Runs every loop:
+
 				counter += 1
-				self.sleep(3613)
+				self.sleep(9) # Sleep for 9 seconds, try to avoid load-intensive tasks at the same time as other plugins
 		except self.StopThread:
 			self.logger.debug(u'runConcurrentThread self.StopThread')
 			if self.keepStats:
@@ -943,14 +962,11 @@ class Plugin(indigo.PluginBase):
 	# Check for dependant plugins, if they are enabled and correct version is installed etc.
 	#
 	def checkDependantPlugins(self):
+	
+		numAttempts = 5 #The number of attempts to load plugin, before disabling the use of the plugin
 		
 		self.logger.debug(u'Checking status of other plugins this plugin depends on')
 		
-		# [<plugin pref for enable of plugin>, <plugin id>, <Friendly name>, <min plugin version>]
-		pluginList = [
-			[u'plugin-betteremail', u'com.flyingdiver.indigoplugin.betteremail', u'Better E-mail', u'7.1.0']
-			]
-			
 		for plug in pluginList:
 			
 			usePlugin = self.pluginPrefs.get(plug[0], False)
@@ -965,7 +981,7 @@ class Plugin(indigo.PluginBase):
 					if not indigoPlug.isRunning():
 						raise ImportError(u'Plugin "%s" is not running, please install/enable, and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
 					if len(indigoPlug.pluginVersion) == 0 or indigoPlug.pluginVersion < plug[3]:
-						raise ImportError(u'Plugin "%s" version %s is less than %s requires (%s), please update the plugin.\nUse of this plugin in %s has been disabled' % (plug[2], indigoPlug.pluginVersion, self.pluginName, plug[3], self.pluginName))
+						raise ImportError(u'Plugin "%s" version %s is less than %s requires (%s), please update the plugin.' % (plug[2], indigoPlug.pluginVersion, self.pluginName, plug[3]))
 						
 					# Plugin specific checks:
 					if plug[1] == u'com.flyingdiver.indigoplugin.betteremail':
@@ -980,25 +996,34 @@ class Plugin(indigo.PluginBase):
 							except:
 								raise ImportError(u'The specified "%s" SMTP device could not be loaded, please check\n%s plugin preferences and that the SMTP device is enabled' % (self.pluginName))					
 				except ImportError as e:
-					self.logger.error(e)
+					self.logger.warning(e)
 					raise
 				except:
-					self.logger.error(u'Could not load plugin "%s". Please install and re-enable in %s plugin preferences' % (plug[2], self.pluginName))
+					self.logger.warning(u'Could not load plugin "%s". Please install or enable in %s plugin preferences' % (plug[2], self.pluginName))
 					raise
 			except:
 				# Common code for disabling use of the plugin
 				if usePlugin: # configured to use plugin, so some error happened
-					self.logger.debug(u'Disabling use of plugin "%s" in plugin prefs' % plug[2])
-					if len(indigoPlug.pluginSupportURL) > 0:
-						self.logger.info(u'"%s" support/install link: %s' % (plug[2], indigoPlug.pluginSupportURL))
+					plug[4] += 1
+					
+					self.logger.warning(u'Could not load plugin "%s" on %s attempt, will try %d more times' % (plug[2], ordinal(plug[4]), numAttempts - plug[4]))
+					
+					if plug[4] == numAttempts:
+						self.logger.error(u'Disabling use of plugin "%s" in plugin prefs after %d attempts' % (plug[2], numAttempts))
+						self.pluginPrefs[plug[0]] = False
+						if plug[1] in self.dependantPlugins:
+							del self.dependantPlugins[plug[1]]
+						if len(indigoPlug.pluginSupportURL) > 0:
+							self.logger.info(u'Plugin "%s" support/install link: %s' % (plug[2], indigoPlug.pluginSupportURL))
+						plug[4] = 0
 				else:
-					self.logger.debug(u'Not configured to use plugin "%s"' % plug[2])
-				self.pluginPrefs[plug[0]] = False
-				if plug[1] in self.dependantPlugins:
-					del self.dependantPlugins[plug[1]]
+					self.extDebug(u'Not configured to use plugin "%s"' % plug[2])
+					if plug[1] in self.dependantPlugins:
+						del self.dependantPlugins[plug[1]]
 			else:
 				# Plugin is successfully initialized, add to dict of enabled plugins
-				self.logger.debug(u'Plugin "%s" successfully checked' % plug[2])
+				plug[4] = 0
+				self.extDebug(u'Plugin "%s" successfully checked' % plug[2])
 				self.dependantPlugins[plug[1]] = indigoPlug
 
 		
