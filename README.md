@@ -19,4 +19,4 @@ It also keeps statistics on your Z-wave network, you will be able to see how man
 
 ## Documentation
 
-Documentation is in progress and will be added to the [Wiki](https://github.com/kris10an/ZEAL/wiki), meanwhile usage information can be found in this [forum thread](http://forums.indigodomo.com/viewtopic.php?f=261&t=17738)
+Documentation is in progress and will be added to the [Wiki](https://github.com/kris10an/ZEAL/wiki), please also use the [forum](http://forums.indigodomo.com/viewforum.php?f=261) for more information or if you have questions.
