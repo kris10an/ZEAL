@@ -3,11 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>PluginVersion</key>
-<<<<<<< HEAD
 	<string>0.3.3</string>
-=======
-	<string>0.3.2</string>
->>>>>>> 873bfe4fd26c88d37a766a25700d20eb4c1bee94
 	<key>ServerApiVersion</key>
 	<string>2.0</string>
 	<key>IwsApiVersion</key>
