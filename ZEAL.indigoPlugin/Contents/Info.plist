@@ -21,5 +21,12 @@
 			<string>https://github.com/kris10an/ZEAL/wiki</string>
 		</dict>
 	</array>
+	<key>GithubInfo</key>
+	<dict>
+		<key>GithubRepo</key>
+		<string>ZEAL</string>
+		<key>GithubUser</key>
+		<string>kris10an</string>
+	</dict>
 </dict>
 </plist>
