@@ -296,11 +296,12 @@ class Plugin(indigo.PluginBase):
 						self.outgoingTriggers = self.checkOutgoingTriggers()	
 										
 					# Check for updates
-					if self.checkForUpdates:
-						if counter == 0 or (self.checkForUpdatesInterval > 0 and 
-						 (counter % self.checkForUpdatesInterval) == 0):
+					#if self.checkForUpdates:
+						#if counter == 0 or (self.checkForUpdatesInterval > 0 and 
+						#(counter % self.checkForUpdatesInterval) == 0):
 					 
-						 self.checkPluginUpdates(notify=True, performUpdate=self.autoUpdate)								
+						 # self.checkPluginUpdates(notify=True, performUpdate=self.autoUpdate)	
+						 # 2018-03-04: Disabled for now (quick-fix), due to ssl issues. Indigo plugin store check should be implemented instead of github check							
 									
 				#Runs 5 first times
 				if counter < 5: 
